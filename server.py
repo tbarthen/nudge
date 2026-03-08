@@ -17,6 +17,34 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 MAX_REMINDERS = 200
 DEFAULT_RETENTION_DAYS = 60
+_SAFE_ID_RE = None
+
+def _is_safe_id(val):
+    """Check that an ID contains only safe characters (alphanumeric, hyphens)."""
+    global _SAFE_ID_RE
+    if _SAFE_ID_RE is None:
+        import re
+        _SAFE_ID_RE = re.compile(r'^[a-zA-Z0-9\-]+$')
+    return isinstance(val, str) and 1 <= len(val) <= 100 and _SAFE_ID_RE.match(val)
+
+
+def _sanitize_item(item, allow_completed=False):
+    """Strip an item down to only known safe fields. Prevents payload bloat and injection."""
+    safe = {
+        "id": str(item.get("id", "")),
+        "text": str(item.get("text", "")).strip()[:500],
+        "created_at": str(item.get("created_at", ""))[:30],
+        "completed_at": None,
+        "pinned": bool(item.get("pinned", False)),
+        "order": int(item["order"]) if isinstance(item.get("order"), (int, float)) else 0,
+    }
+    if allow_completed and item.get("completed_at"):
+        safe["completed_at"] = str(item["completed_at"])[:30]
+    if isinstance(item.get("updated_at"), str):
+        safe["updated_at"] = item["updated_at"][:30]
+    if isinstance(item.get("deletion_flagged"), bool):
+        safe["deletion_flagged"] = item["deletion_flagged"]
+    return safe
 
 
 def _load_data():
@@ -135,6 +163,12 @@ def add_reminder():
         pinned = False
     # Accept client-provided id to stay in sync with IDB
     client_id = str(body.get("id", "")).strip()[:100] if body.get("id") else ""
+    if client_id and not _is_safe_id(client_id):
+        return jsonify({"error": "invalid id format"}), 400
+    # Validate created_at if provided
+    client_created = body.get("created_at")
+    if client_created:
+        client_created = str(client_created)[:30]
     with _data_lock:
         data = _load_data()
         if len(data["reminders"]) >= MAX_REMINDERS:
@@ -146,7 +180,7 @@ def add_reminder():
         reminder = {
             "id": client_id or str(uuid.uuid4()),
             "text": text,
-            "created_at": body.get("created_at", datetime.now().isoformat()),
+            "created_at": client_created or datetime.now().isoformat(),
             "completed_at": None,
             "pinned": pinned,
             "order": body.get("order", max_order + 1) if isinstance(body.get("order"), (int, float)) else max_order + 1,
@@ -296,6 +330,8 @@ def uncomplete_reminder(completed_id):
                 break
         if not found:
             return jsonify({"error": "not found"}), 404
+        if len(data["reminders"]) >= MAX_REMINDERS:
+            return jsonify({"error": f"max {MAX_REMINDERS} reminders"}), 400
         found["completed_at"] = None
         data["reminders"].append(found)
         _save_data(data)
@@ -469,10 +505,16 @@ def sync_data():
     if len(phone_reminders) > MAX_REMINDERS * 2 or len(phone_completed) > MAX_REMINDERS * 2:
         return jsonify({"error": "payload too large"}), 400
 
-    # Validate each item has at least an id string
+    # Validate and sanitize each item
     for item in phone_reminders + phone_completed:
         if not isinstance(item, dict) or not isinstance(item.get("id"), str):
             return jsonify({"error": "each item must have a string id"}), 400
+        if not _is_safe_id(item["id"]):
+            return jsonify({"error": "invalid item id format"}), 400
+
+    # Strip items to known safe fields only
+    phone_reminders = [_sanitize_item(r) for r in phone_reminders]
+    phone_completed = [_sanitize_item(c, allow_completed=True) for c in phone_completed]
 
     with _data_lock:
         data = _load_data()

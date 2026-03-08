@@ -931,12 +931,19 @@ function generateId() {
   return crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2));
 }
 
+// Validate IDs contain only safe characters (prevents XSS in inline handlers)
+const SAFE_ID_RE = /^[a-zA-Z0-9\-]+$/;
+function isSafeId(id) {
+  return typeof id === 'string' && id.length > 0 && id.length <= 100 && SAFE_ID_RE.test(id);
+}
+
 // -- Reminders --
 async function loadReminders() {
   const list = document.getElementById('reminderList');
   let reminders;
   try {
     reminders = await idbGetAll('reminders');
+    reminders = reminders.filter(r => isSafeId(r.id));
     reminders.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (b.order || 0) - (a.order || 0));
   } catch (_) {
     reminders = [];
@@ -1100,6 +1107,7 @@ async function loadCompleted() {
   let completed;
   try {
     completed = await idbGetAll('completed');
+    completed = completed.filter(c => isSafeId(c.id));
     completed.sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''));
   } catch (_) {
     completed = [];
@@ -1902,8 +1910,8 @@ async function initialServerSync() {
       api('/api/completed'),
     ]);
     // Server is reachable — use its data as the source of truth for initial load
-    await idbPutAll('reminders', reminders);
-    await idbPutAll('completed', completed);
+    await idbPutAll('reminders', reminders.filter(r => isSafeId(r.id)));
+    await idbPutAll('completed', completed.filter(c => isSafeId(c.id)));
   } catch (e) { /* standalone mode — no server, IDB is source of truth */ }
 }
 
@@ -2053,10 +2061,10 @@ async function syncNow() {
 
     const merged = await res.json();
 
-    // Update IndexedDB with merged data
+    // Update IndexedDB with merged data (filter unsafe IDs)
     await Promise.all([
-      idbPutAll('reminders', merged.reminders || []),
-      idbPutAll('completed', merged.completed || []),
+      idbPutAll('reminders', (merged.reminders || []).filter(r => isSafeId(r.id))),
+      idbPutAll('completed', (merged.completed || []).filter(c => isSafeId(c.id))),
     ]);
 
     localStorage.setItem('nudge-last-sync', new Date().toISOString());
