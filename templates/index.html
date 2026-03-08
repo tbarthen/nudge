@@ -3,6 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#e94560">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="/static/manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
 <title>Nudge — DO IT!!!</title>
 <style>
 :root {
@@ -68,10 +74,15 @@ header .subtitle {
   margin-top: 4px;
 }
 
-.settings-btn {
+.header-btns {
   position: absolute;
   top: 32px;
   right: 0;
+  display: flex;
+  gap: 2px;
+}
+
+.header-btn {
   background: none;
   border: none;
   color: var(--text-muted);
@@ -82,9 +93,71 @@ header .subtitle {
   transition: color 0.2s, background 0.2s;
 }
 
-.settings-btn:hover {
+.header-btn:hover {
   color: var(--text);
   background: var(--card);
+}
+
+/* Share modal */
+.share-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 999;
+  display: none;
+  justify-content: center;
+  align-items: center;
+}
+
+.share-overlay.visible { display: flex; }
+
+.share-panel {
+  background: var(--surface);
+  border-radius: 16px;
+  padding: 24px;
+  width: 90%;
+  max-width: 360px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.4);
+  text-align: center;
+}
+
+.share-panel h2 {
+  font-size: 1.3rem;
+  margin-bottom: 16px;
+  color: var(--accent);
+}
+
+
+.share-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.share-actions button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.share-actions .share-email {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.share-actions .share-native {
+  background: var(--accent);
+  color: white;
+}
+
+.share-actions .share-close {
+  background: none;
+  color: var(--text-muted);
 }
 
 /* Add reminder */
@@ -460,6 +533,216 @@ header .subtitle {
   font-size: 1rem;
 }
 
+/* Swipe container */
+.swipe-wrapper {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+.swipe-bg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  font-size: 1.3rem;
+  color: white;
+  font-weight: 700;
+  user-select: none;
+}
+
+.swipe-bg-complete {
+  background: var(--success);
+  justify-content: flex-start;
+  padding-left: 20px;
+}
+
+.swipe-bg-delete {
+  background: var(--accent);
+  justify-content: flex-end;
+  padding-right: 20px;
+}
+
+.swipe-wrapper .reminder-item {
+  position: relative;
+  z-index: 1;
+  transition: none;
+  animation: none;
+}
+
+.swipe-wrapper .reminder-item.swiping {
+  transition: none;
+}
+
+.swipe-wrapper .reminder-item.snapping {
+  transition: transform 0.2s ease-out;
+}
+
+.swipe-wrapper .reminder-item.dismissing {
+  transition: transform 0.3s ease-in;
+}
+
+/* Undo toast */
+.undo-toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 16px;
+  display: none;
+  align-items: center;
+  gap: 12px;
+  z-index: 1001;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  max-width: 90%;
+  animation: slideUp 0.2s ease-out;
+}
+
+.undo-toast.visible { display: flex; }
+
+.undo-toast .toast-text {
+  font-size: 0.85rem;
+  color: var(--text);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.undo-toast button {
+  padding: 6px 14px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* Selection mode */
+.reminder-item.selected {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: rgba(233, 69, 96, 0.1);
+}
+
+.reminder-item .select-check {
+  display: none;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--text-muted);
+  border-radius: 6px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  color: white;
+  transition: all 0.15s;
+}
+
+body.select-mode .select-check { display: flex; }
+body.select-mode .drag-handle { display: none; }
+body.select-mode .actions { display: none; }
+body.select-mode .reminder-item { cursor: pointer; }
+body.select-mode .reminder-item[draggable] { draggable: false; }
+
+.reminder-item.selected .select-check {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Flagged for deletion (sync conflict) */
+.reminder-item.deletion-flagged {
+  border: 2px dashed #e74c3c;
+  background: rgba(231, 76, 60, 0.08);
+}
+
+.reminder-item.deletion-flagged .text {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.reminder-item .flag-icon {
+  display: none;
+  color: #e74c3c;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.reminder-item.deletion-flagged .flag-icon { display: inline; }
+
+/* Floating action bar */
+.action-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 12px 16px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  z-index: 998;
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.3);
+  animation: slideUp 0.2s ease-out;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.action-bar.visible { display: flex; }
+
+.action-bar .count {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-right: auto;
+}
+
+.action-bar button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.action-bar button:active { transform: scale(0.95); }
+
+.action-bar .bar-complete {
+  background: var(--success);
+  color: white;
+}
+
+.action-bar .bar-delete {
+  background: var(--accent);
+  color: white;
+}
+
+.action-bar .bar-select-all {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.action-bar .bar-cancel {
+  background: none;
+  color: var(--text-muted);
+}
+
 /* Responsive */
 @media (max-width: 480px) {
   header h1 { font-size: 2.2rem; }
@@ -474,7 +757,10 @@ header .subtitle {
   <header>
     <h1>DO IT!!!</h1>
     <div class="subtitle">Your daily nudge</div>
-    <button class="settings-btn" onclick="toggleSettings()" title="Settings">&#9881;</button>
+    <div class="header-btns">
+      <button class="header-btn" onclick="openShare()" title="Share">&#x1F517;</button>
+      <button class="header-btn" onclick="toggleSettings()" title="Settings">&#9881;</button>
+    </div>
   </header>
 
   <form class="add-form" onsubmit="addReminder(event)">
@@ -493,8 +779,38 @@ header .subtitle {
   </div>
 </div>
 
+<!-- Undo toast -->
+<div class="undo-toast" id="undoToast">
+  <span class="toast-text" id="undoText"></span>
+  <button onclick="undoAction()">Undo</button>
+  <button onclick="dismissToast()" style="background:none;color:var(--text-muted);padding:4px 8px;font-size:1rem;">&times;</button>
+</div>
+
+<!-- Floating action bar for multi-select -->
+<div class="action-bar" id="actionBar">
+  <span class="count" id="selectCount">0 selected</span>
+  <button class="bar-select-all" onclick="selectAll()">Select all</button>
+  <button class="bar-complete" onclick="batchComplete()">Complete</button>
+  <button class="bar-delete" onclick="batchDelete()">Delete</button>
+  <button class="bar-cancel" onclick="exitSelectMode()">Cancel</button>
+</div>
+
 <!-- Context menu -->
 <div class="context-menu" id="contextMenu"></div>
+
+<!-- Share overlay -->
+<div class="share-overlay" id="shareOverlay" onclick="closeShareOutside(event)">
+  <div class="share-panel">
+    <h2>Share Nudge</h2>
+    <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px">Give someone their own copy of Nudge. They get an independent TODO list they can use right away.</p>
+    <div class="share-actions">
+      <button class="share-email" onclick="downloadApp()">Download file</button>
+      <button class="share-email" onclick="emailShareApp()">Email it</button>
+      <button class="share-native" id="shareNativeBtn" style="display:none" onclick="nativeShare()">Share</button>
+      <button class="share-close" onclick="closeShare()">Done</button>
+    </div>
+  </div>
+</div>
 
 <!-- Settings overlay -->
 <div class="settings-overlay" id="settingsOverlay" onclick="closeSettingsOutside(event)">
@@ -513,11 +829,47 @@ header .subtitle {
       </select>
     </div>
     <div class="setting-row">
+      <label>Keep completed for</label>
+      <div style="display:flex;align-items:center;gap:6px">
+        <input type="number" id="retentionDays" min="1" max="365" value="60" style="width:70px" onchange="updateRetention()">
+        <span style="font-size:0.85rem;color:var(--text-muted)">days</span>
+      </div>
+    </div>
+    <div class="setting-row">
       <label>Theme</label>
       <div class="theme-toggle" id="themeToggle">
         <button onclick="setTheme('light')">Light</button>
         <button onclick="setTheme('dark')" class="active">Dark</button>
         <button onclick="setTheme('system')">System</button>
+      </div>
+    </div>
+    <div class="setting-row" style="flex-direction:column;align-items:stretch;gap:10px">
+      <label>Sync</label>
+      <div id="syncSection">
+        <!-- Desktop: generate pairing code -->
+        <div id="syncDesktop" style="display:none">
+          <button onclick="generatePairingCode()" style="padding:8px 16px;background:var(--accent);color:white;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:600">Generate pairing code</button>
+          <div id="pairingCodeDisplay" style="display:none;margin-top:10px">
+            <div style="font-size:2rem;font-weight:900;letter-spacing:8px;text-align:center;color:var(--accent);font-family:monospace" id="pairingCode"></div>
+            <div style="font-size:0.75rem;color:var(--text-muted);text-align:center;margin-top:4px" id="pairingExpiry"></div>
+          </div>
+          <div id="pairedDevicesInfo" style="margin-top:8px;font-size:0.8rem;color:var(--text-muted)"></div>
+        </div>
+        <!-- Phone/PWA: enter server + code -->
+        <div id="syncPhone" style="display:none">
+          <div id="syncNotPaired">
+            <input type="text" id="syncServerUrl" placeholder="Server address (e.g. 192.168.1.100:5123)" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:0.9rem;margin-bottom:8px">
+            <input type="text" id="syncPairCode" placeholder="6-digit pairing code" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:0.9rem;margin-bottom:8px;letter-spacing:4px;text-align:center">
+            <button onclick="pairWithServer()" style="width:100%;padding:8px 16px;background:var(--accent);color:white;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:600">Pair</button>
+            <div id="pairError" style="color:#e74c3c;font-size:0.8rem;margin-top:6px;display:none"></div>
+          </div>
+          <div id="syncPaired" style="display:none">
+            <div style="font-size:0.9rem;color:var(--success);margin-bottom:8px">Synced with <span id="syncedServer"></span></div>
+            <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:8px" id="lastSyncTime">Last sync: never</div>
+            <button onclick="syncNow()" style="padding:6px 14px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:0.8rem;margin-right:6px">Sync now</button>
+            <button onclick="unpairDevice()" style="padding:6px 14px;background:none;color:var(--text-muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:0.8rem">Unsync</button>
+          </div>
+        </div>
       </div>
     </div>
     <button class="settings-close" onclick="toggleSettings()">Done</button>
@@ -533,35 +885,104 @@ async function api(path, method = 'GET', body = null) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(API + path, opts);
-  return res.json();
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+// Try server API, swallow errors (for background sync after local writes)
+async function apiQuiet(path, method = 'GET', body = null) {
+  try { return await api(path, method, body); } catch (e) { return null; }
+}
+
+// -- IDB single-item helpers --
+async function idbPut(storeName, item) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    tx.objectStore(storeName).put(item);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbDelete(storeName, id) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    tx.objectStore(storeName).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbGet(storeName, id) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readonly');
+    const req = tx.objectStore(storeName).get(id);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function generateId() {
+  return crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2));
 }
 
 // -- Reminders --
 async function loadReminders() {
   const list = document.getElementById('reminderList');
-  const reminders = await api('/api/reminders');
+  let reminders;
+  try {
+    reminders = await idbGetAll('reminders');
+    reminders.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (b.order || 0) - (a.order || 0));
+  } catch (_) {
+    reminders = [];
+  }
 
   if (reminders.length === 0) {
     list.innerHTML = '<div class="empty-state"><div class="emoji">&#128170;</div><p>No reminders yet. Add one above!<br><span style="font-size:0.8rem;color:var(--text-muted)">e.g. "Eat spaghetti with hand tied behind back"</span></p></div>';
     return;
   }
 
+  // Preserve selection state across reloads
+  const prevSelected = new Set(selectedIds);
+
   list.innerHTML = reminders.map((r, idx) => {
     const safeId = escapeAttr(r.id);
     return `
-    <div class="reminder-item" data-id="${safeId}" data-order="${parseInt(r.order) || 0}" draggable="true">
-      <span class="drag-handle" title="Drag to reorder">&#9776;</span>
-      ${r.pinned ? '<span class="pin-badge" title="Pinned">&#128204;</span>' : ''}
-      <span class="text">${escapeHtml(r.text)}</span>
-      <input class="edit-input" type="text" value="${escapeAttr(r.text)}">
-      <div class="actions">
-        <button class="btn-icon btn-save" style="display:none" onclick="saveEdit('${safeId}', this)" title="Save">&#10003;</button>
-        <button class="btn-icon btn-complete" onclick="completeReminder('${safeId}')" title="Complete">&#10003;</button>
-        <button class="btn-icon btn-menu" onclick="showMenu(event, '${safeId}', ${!!r.pinned}, ${idx}, ${reminders.length})" title="More">&#8942;</button>
+    <div class="swipe-wrapper" data-id="${safeId}">
+      <div class="swipe-bg swipe-bg-complete">&#10003; Done</div>
+      <div class="swipe-bg swipe-bg-delete" style="display:none">Delete &#128465;</div>
+      <div class="reminder-item${r.deletion_flagged ? ' deletion-flagged' : ''}" data-id="${safeId}" data-order="${parseInt(r.order) || 0}" draggable="true">
+        <div class="select-check">&#10003;</div>
+        <span class="drag-handle" title="Drag to reorder">&#9776;</span>
+        <span class="flag-icon" title="Flagged for deletion on another device">&#9888;</span>
+        ${r.pinned ? '<span class="pin-badge" title="Pinned">&#128204;</span>' : ''}
+        <span class="text">${escapeHtml(r.text)}</span>
+        <input class="edit-input" type="text" value="${escapeAttr(r.text)}">
+        <div class="actions">
+          <button class="btn-icon btn-save" style="display:none" onclick="saveEdit('${safeId}', this)" title="Save">&#10003;</button>
+          <button class="btn-icon btn-complete" onclick="completeReminder('${safeId}')" title="Complete">&#10003;</button>
+          <button class="btn-icon btn-menu" onclick="showMenu(event, '${safeId}', ${!!r.pinned}, ${idx}, ${reminders.length})" title="More">&#8942;</button>
+        </div>
       </div>
     </div>`;
   }).join('');
+
+  // Restore selection state if in select mode
+  if (selectMode && prevSelected.size > 0) {
+    selectedIds.clear();
+    prevSelected.forEach(id => {
+      const el = document.querySelector(`.reminder-item[data-id="${id}"]`);
+      if (el) { selectedIds.add(id); el.classList.add('selected'); }
+    });
+    updateActionBar();
+  }
+
   initDragAndDrop();
+  initSwipe();
 }
 
 async function addReminder(e) {
@@ -569,21 +990,38 @@ async function addReminder(e) {
   const input = document.getElementById('newReminder');
   const text = input.value.trim();
   if (!text) return;
-  await api('/api/reminders', 'POST', { text });
+  const allReminders = await idbGetAll('reminders');
+  const maxOrder = allReminders.reduce((m, r) => Math.max(m, r.order || 0), -1);
+  const reminder = {
+    id: generateId(),
+    text: text.slice(0, 500),
+    created_at: new Date().toISOString(),
+    completed_at: null,
+    pinned: false,
+    order: maxOrder + 1,
+  };
+  await idbPut('reminders', reminder);
   input.value = '';
   loadReminders();
-  loadCompleted();
+  apiQuiet('/api/reminders', 'POST', reminder);
 }
 
 async function completeReminder(id) {
-  await api(`/api/reminders/${id}/complete`, 'PATCH');
+  const item = await idbGet('reminders', id);
+  if (item) {
+    item.completed_at = new Date().toISOString();
+    await idbPut('completed', item);
+    await idbDelete('reminders', id);
+  }
   loadReminders();
   loadCompleted();
+  apiQuiet(`/api/reminders/${id}/complete`, 'PATCH');
 }
 
 async function deleteReminder(id) {
-  await api(`/api/reminders/${id}`, 'DELETE');
+  await idbDelete('reminders', id);
   loadReminders();
+  apiQuiet(`/api/reminders/${id}`, 'DELETE');
 }
 
 function startEdit(id) {
@@ -606,18 +1044,30 @@ function startEdit(id) {
 }
 
 async function saveEdit(id, btn) {
-  const item = btn.closest('.reminder-item');
-  const newText = item.querySelector('.edit-input').value.trim();
+  const el = btn.closest('.reminder-item');
+  const newText = el.querySelector('.edit-input').value.trim();
   if (newText) {
-    await api(`/api/reminders/${id}`, 'PUT', { text: newText });
+    const item = await idbGet('reminders', id);
+    if (item) {
+      item.text = newText.slice(0, 500);
+      item.updated_at = new Date().toISOString();
+      await idbPut('reminders', item);
+    }
+    apiQuiet(`/api/reminders/${id}`, 'PUT', { text: newText });
   }
   loadReminders();
 }
 
 async function togglePin(id, currentlyPinned) {
-  await api(`/api/reminders/${id}`, 'PUT', { pinned: !currentlyPinned });
+  const item = await idbGet('reminders', id);
+  if (item) {
+    item.pinned = !currentlyPinned;
+    item.updated_at = new Date().toISOString();
+    await idbPut('reminders', item);
+  }
   hideMenu();
   loadReminders();
+  apiQuiet(`/api/reminders/${id}`, 'PUT', { pinned: !currentlyPinned });
 }
 
 // -- Context menu --
@@ -630,6 +1080,7 @@ function showMenu(e, id, pinned, idx, total) {
   if (idx > 0) html += `<button onclick="moveReminder('${id}', 'up'); hideMenu()">&#9650; Move up</button>`;
   if (idx < total - 1) html += `<button onclick="moveReminder('${id}', 'down'); hideMenu()">&#9660; Move down</button>`;
   html += `<button onclick="deleteReminder('${id}'); hideMenu()">Delete</button>`;
+  html += `<button onclick="hideMenu(); enterSelectMode('${id}')">Select</button>`;
   menu.innerHTML = html;
   const rect = e.target.getBoundingClientRect();
   menu.style.top = rect.bottom + 4 + 'px';
@@ -645,7 +1096,13 @@ document.addEventListener('click', hideMenu);
 
 // -- Completed --
 async function loadCompleted() {
-  const completed = await api('/api/completed');
+  let completed;
+  try {
+    completed = await idbGetAll('completed');
+    completed.sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''));
+  } catch (_) {
+    completed = [];
+  }
   const section = document.getElementById('completedSection');
   const list = document.getElementById('completedList');
 
@@ -672,13 +1129,42 @@ function toggleCompleted() {
 
 // -- Settings --
 async function loadConfig() {
-  const config = await api('/api/config');
-  document.getElementById('intervalSelect').value = config.popup_interval_minutes;
+  try {
+    const config = await api('/api/config');
+    document.getElementById('intervalSelect').value = config.popup_interval_minutes;
+    document.getElementById('retentionDays').value = config.completed_retention_days || 60;
+    localStorage.setItem('nudge-retention-days', config.completed_retention_days || 60);
+  } catch (e) {
+    // Standalone mode — use localStorage
+    document.getElementById('retentionDays').value = localStorage.getItem('nudge-retention-days') || 60;
+  }
 }
 
 async function updateConfig() {
   const interval = parseInt(document.getElementById('intervalSelect').value);
-  await api('/api/config', 'PUT', { popup_interval_minutes: interval });
+  apiQuiet('/api/config', 'PUT', { popup_interval_minutes: interval });
+}
+
+async function updateRetention() {
+  const input = document.getElementById('retentionDays');
+  let days = parseInt(input.value);
+  if (isNaN(days) || days < 1) { days = 1; input.value = 1; }
+  if (days > 365) { days = 365; input.value = 365; }
+
+  if (days <= 5) {
+    const ok = confirm(
+      `You're about to set retention to just ${days} day${days === 1 ? '' : 's'}.\n\n` +
+      `Completed reminders older than ${days} day${days === 1 ? '' : 's'} will be permanently deleted — there is no undo.\n\n` +
+      `Are you sure?`
+    );
+    if (!ok) {
+      input.value = localStorage.getItem('nudge-retention-days') || 60;
+      return;
+    }
+  }
+
+  localStorage.setItem('nudge-retention-days', days);
+  apiQuiet('/api/config', 'PUT', { completed_retention_days: days });
 }
 
 function toggleSettings() {
@@ -716,7 +1202,7 @@ function escapeHtml(s) {
 }
 
 function escapeAttr(s) {
-  return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 function formatTime(iso) {
@@ -730,6 +1216,344 @@ function formatTime(iso) {
   return d.toLocaleDateString();
 }
 
+// -- Share --
+
+function openShare() {
+  document.getElementById('shareOverlay').classList.add('visible');
+  if (navigator.share) {
+    document.getElementById('shareNativeBtn').style.display = 'inline-block';
+  }
+}
+
+function closeShare() {
+  document.getElementById('shareOverlay').classList.remove('visible');
+}
+
+function closeShareOutside(e) {
+  if (e.target === document.getElementById('shareOverlay')) {
+    closeShare();
+  }
+}
+
+function downloadApp() {
+  // Clone the document to strip dynamic state (user's reminders, sync info, etc.)
+  const clone = document.documentElement.cloneNode(true);
+  // Clear rendered reminder lists
+  const reminderList = clone.querySelector('#reminderList');
+  if (reminderList) reminderList.innerHTML = '';
+  const completedList = clone.querySelector('#completedList');
+  if (completedList) completedList.innerHTML = '';
+  const completedSection = clone.querySelector('#completedSection');
+  if (completedSection) completedSection.style.display = 'none';
+  // Reset settings inputs
+  const syncServerUrl = clone.querySelector('#syncServerUrl');
+  if (syncServerUrl) syncServerUrl.value = '';
+  const syncPairCode = clone.querySelector('#syncPairCode');
+  if (syncPairCode) syncPairCode.value = '';
+  // Hide overlays
+  clone.querySelectorAll('.visible').forEach(el => el.classList.remove('visible'));
+
+  const html = '<!DOCTYPE html>' + clone.outerHTML;
+  const blob = new Blob([html], { type: 'text/html' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'nudge.html';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function emailShareApp() {
+  const subject = encodeURIComponent('Try Nudge - DO IT!!!');
+  const body = encodeURIComponent(
+    'Hey! I\'ve been using Nudge to track my reminders.\n\n' +
+    'You can get your own copy here:\n' +
+    'https://github.com/tbarthen/nudge\n\n' +
+    'Just download the app and open it — it works right in your browser!'
+  );
+  window.open(`mailto:?subject=${subject}&body=${body}`, '_self');
+}
+
+async function nativeShare() {
+  try {
+    await navigator.share({
+      title: 'Nudge - DO IT!!!',
+      text: 'Track your reminders with Nudge!',
+      url: window.location.href,
+    });
+  } catch (e) {
+    // User cancelled or share failed
+  }
+}
+
+// -- Multi-select --
+let selectMode = false;
+let selectedIds = new Set();
+
+function enterSelectMode(initialId) {
+  selectMode = true;
+  selectedIds.clear();
+  document.body.classList.add('select-mode');
+  if (initialId) toggleSelect(initialId);
+  updateActionBar();
+}
+
+function exitSelectMode() {
+  selectMode = false;
+  selectedIds.clear();
+  document.body.classList.remove('select-mode');
+  document.querySelectorAll('.reminder-item.selected').forEach(el => el.classList.remove('selected'));
+  document.getElementById('actionBar').classList.remove('visible');
+}
+
+function toggleSelect(id) {
+  if (selectedIds.has(id)) {
+    selectedIds.delete(id);
+    const el = document.querySelector(`.reminder-item[data-id="${id}"]`);
+    if (el) el.classList.remove('selected');
+  } else {
+    selectedIds.add(id);
+    const el = document.querySelector(`.reminder-item[data-id="${id}"]`);
+    if (el) el.classList.add('selected');
+  }
+  updateActionBar();
+  if (selectedIds.size === 0) exitSelectMode();
+}
+
+function selectAll() {
+  document.querySelectorAll('.reminder-item').forEach(el => {
+    selectedIds.add(el.dataset.id);
+    el.classList.add('selected');
+  });
+  updateActionBar();
+}
+
+function updateActionBar() {
+  const bar = document.getElementById('actionBar');
+  const count = selectedIds.size;
+  if (count > 0) {
+    bar.classList.add('visible');
+    document.getElementById('selectCount').textContent = count + ' selected';
+  } else {
+    bar.classList.remove('visible');
+  }
+}
+
+async function batchComplete() {
+  const ids = [...selectedIds];
+  if (ids.length === 0) return;
+  exitSelectMode();
+  for (const id of ids) {
+    const item = await idbGet('reminders', id);
+    if (item) {
+      item.completed_at = new Date().toISOString();
+      await idbPut('completed', item);
+      await idbDelete('reminders', id);
+    }
+  }
+  loadReminders();
+  loadCompleted();
+  apiQuiet('/api/reminders/batch-complete', 'POST', ids);
+}
+
+async function batchDelete() {
+  const ids = [...selectedIds];
+  if (ids.length === 0) return;
+  const ok = confirm(`Permanently delete ${ids.length} reminder${ids.length === 1 ? '' : 's'}?\n\nThis cannot be undone.`);
+  if (!ok) return;
+  exitSelectMode();
+  for (const id of ids) {
+    await idbDelete('reminders', id);
+  }
+  loadReminders();
+  apiQuiet('/api/reminders/batch-delete', 'POST', ids);
+}
+
+function initSelectHandlers() {
+  const list = document.getElementById('reminderList');
+
+  // Click handler for select mode toggling
+  list.addEventListener('click', e => {
+    if (!selectMode) return;
+    const item = e.target.closest('.reminder-item');
+    if (!item) return;
+    // Don't interfere with edit inputs
+    if (e.target.closest('.edit-input')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    toggleSelect(item.dataset.id);
+  }, true);
+
+  // Long-press to enter select mode (mobile + desktop)
+  let pressTimer = null;
+  let pressItem = null;
+
+  list.addEventListener('pointerdown', e => {
+    const item = e.target.closest('.reminder-item');
+    if (!item || selectMode) return;
+    // Don't trigger on buttons or inputs
+    if (e.target.closest('.actions') || e.target.closest('.edit-input')) return;
+    pressItem = item;
+    pressTimer = setTimeout(() => {
+      enterSelectMode(item.dataset.id);
+      if (navigator.vibrate) navigator.vibrate(30);
+      pressTimer = null;
+    }, 500);
+  });
+
+  list.addEventListener('pointermove', () => {
+    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+  });
+
+  list.addEventListener('pointerup', () => {
+    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+  });
+
+  list.addEventListener('pointercancel', () => {
+    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+  });
+}
+
+initSelectHandlers();
+
+// -- Undo toast --
+let undoData = null; // { type: 'complete'|'delete', id, text, reminder }
+
+function showUndo(type, text, reminder) {
+  undoData = { type, id: reminder.id, text, reminder };
+  const toast = document.getElementById('undoToast');
+  document.getElementById('undoText').textContent =
+    type === 'complete' ? `Completed: ${text}` : `Deleted: ${text}`;
+  toast.classList.add('visible');
+}
+
+function dismissToast() {
+  document.getElementById('undoToast').classList.remove('visible');
+  undoData = null;
+}
+
+async function undoAction() {
+  if (!undoData) return;
+  document.getElementById('undoToast').classList.remove('visible');
+  if (undoData.type === 'complete') {
+    const item = await idbGet('completed', undoData.id);
+    if (item) {
+      item.completed_at = null;
+      await idbPut('reminders', item);
+      await idbDelete('completed', undoData.id);
+    }
+    apiQuiet(`/api/completed/${undoData.id}/uncomplete`, 'PATCH');
+  } else {
+    // Re-create the reminder
+    const restored = {
+      id: generateId(),
+      text: undoData.text,
+      created_at: new Date().toISOString(),
+      completed_at: null,
+      pinned: undoData.reminder.pinned || false,
+      order: 0,
+    };
+    await idbPut('reminders', restored);
+    apiQuiet('/api/reminders', 'POST', { text: undoData.text, pinned: restored.pinned });
+  }
+  undoData = null;
+  loadReminders();
+  loadCompleted();
+}
+
+// -- Swipe gestures --
+const SWIPE_THRESHOLD = 80;
+
+function initSwipe() {
+  const wrappers = document.querySelectorAll('.swipe-wrapper');
+
+  wrappers.forEach(wrapper => {
+    const item = wrapper.querySelector('.reminder-item');
+    const bgComplete = wrapper.querySelector('.swipe-bg-complete');
+    const bgDelete = wrapper.querySelector('.swipe-bg-delete');
+    let startX = 0, currentX = 0, swiping = false;
+
+    item.addEventListener('touchstart', e => {
+      if (selectMode) return;
+      startX = e.touches[0].clientX;
+      currentX = 0;
+      swiping = true;
+      item.classList.remove('snapping', 'dismissing');
+      item.classList.add('swiping');
+    }, { passive: true });
+
+    item.addEventListener('touchmove', e => {
+      if (!swiping || selectMode) return;
+      currentX = e.touches[0].clientX - startX;
+
+      // Show correct background
+      if (currentX > 0) {
+        bgComplete.style.display = 'flex';
+        bgDelete.style.display = 'none';
+      } else if (currentX < 0) {
+        bgDelete.style.display = 'flex';
+        bgComplete.style.display = 'none';
+      }
+
+      item.style.transform = `translateX(${currentX}px)`;
+    }, { passive: true });
+
+    item.addEventListener('touchend', async () => {
+      if (!swiping) return;
+      swiping = false;
+      item.classList.remove('swiping');
+
+      const id = wrapper.dataset.id;
+      const textEl = item.querySelector('.text');
+      const text = textEl ? textEl.textContent : '';
+
+      if (currentX > SWIPE_THRESHOLD) {
+        // Swipe right — complete
+        item.classList.add('dismissing');
+        item.style.transform = `translateX(${window.innerWidth}px)`;
+        const reminderData = { id, text, pinned: !!item.querySelector('.pin-badge') };
+        setTimeout(async () => {
+          const idbItem = await idbGet('reminders', id);
+          if (idbItem) {
+            idbItem.completed_at = new Date().toISOString();
+            await idbPut('completed', idbItem);
+            await idbDelete('reminders', id);
+          }
+          showUndo('complete', text, reminderData);
+          loadReminders();
+          loadCompleted();
+          apiQuiet(`/api/reminders/${id}/complete`, 'PATCH');
+        }, 300);
+      } else if (currentX < -SWIPE_THRESHOLD) {
+        // Swipe left — delete
+        item.classList.add('dismissing');
+        item.style.transform = `translateX(-${window.innerWidth}px)`;
+        const reminderData = { id, text, pinned: !!item.querySelector('.pin-badge') };
+        setTimeout(async () => {
+          await idbDelete('reminders', id);
+          showUndo('delete', text, reminderData);
+          loadReminders();
+          apiQuiet(`/api/reminders/${id}`, 'DELETE');
+        }, 300);
+      } else {
+        // Snap back
+        item.classList.add('snapping');
+        item.style.transform = 'translateX(0)';
+        setTimeout(() => {
+          bgComplete.style.display = 'none';
+          bgDelete.style.display = 'none';
+        }, 200);
+      }
+    });
+
+    item.addEventListener('touchcancel', () => {
+      swiping = false;
+      item.classList.remove('swiping');
+      item.classList.add('snapping');
+      item.style.transform = 'translateX(0)';
+    });
+  });
+}
+
 // -- Reorder --
 async function moveReminder(id, direction) {
   const items = [...document.querySelectorAll('.reminder-item')];
@@ -737,14 +1561,26 @@ async function moveReminder(id, direction) {
   if (idx < 0) return;
   const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
   if (swapIdx < 0 || swapIdx >= items.length) return;
-  // Swap orders between the two items
   const orderA = parseInt(items[idx].dataset.order);
   const orderB = parseInt(items[swapIdx].dataset.order);
-  await api('/api/reminders/reorder', 'POST', [
+  const reorderData = [
     { id: items[idx].dataset.id, order: orderB },
     { id: items[swapIdx].dataset.id, order: orderA }
-  ]);
+  ];
+  await applyReorder(reorderData);
   loadReminders();
+}
+
+async function applyReorder(reorderData) {
+  for (const entry of reorderData) {
+    const item = await idbGet('reminders', entry.id);
+    if (item) {
+      item.order = entry.order;
+      item.updated_at = new Date().toISOString();
+      await idbPut('reminders', item);
+    }
+  }
+  apiQuiet('/api/reminders/reorder', 'POST', reorderData);
 }
 
 function initDragAndDrop() {
@@ -789,13 +1625,14 @@ function initDragAndDrop() {
       id: el.dataset.id,
       order: allItems.length - 1 - i
     }));
-    await api('/api/reminders/reorder', 'POST', reorder);
+    await applyReorder(reorder);
     loadReminders();
   });
 
   items.forEach(item => {
     // Desktop drag events
     item.addEventListener('dragstart', e => {
+      if (selectMode) { e.preventDefault(); return; }
       dragItem = item;
       item.classList.add('dragging');
       e.dataTransfer.effectAllowed = 'move';
@@ -855,7 +1692,7 @@ function initDragAndDrop() {
         id: el.dataset.id,
         order: allItems.length - 1 - i
       }));
-      await api('/api/reminders/reorder', 'POST', reorder);
+      await applyReorder(reorder);
       loadReminders();
     });
 
@@ -924,7 +1761,7 @@ function initDragAndDrop() {
         id: el.dataset.id,
         order: allItems.length - 1 - i
       }));
-      await api('/api/reminders/reorder', 'POST', reorder);
+      await applyReorder(reorder);
       dragItem = null;
       loadReminders();
     });
@@ -956,6 +1793,296 @@ loadConfig();
 
 // Auto-refresh every 30s
 setInterval(() => { loadReminders(); loadCompleted(); }, 30000);
+
+// -- Service Worker registration --
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+}
+
+// -- IndexedDB layer for offline PWA --
+const IDB_NAME = 'nudge-db';
+const IDB_VERSION = 1;
+let _idbConn = null;
+
+function openDB() {
+  if (_idbConn) return Promise.resolve(_idbConn);
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('reminders')) {
+        db.createObjectStore('reminders', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('completed')) {
+        db.createObjectStore('completed', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('meta')) {
+        db.createObjectStore('meta', { keyPath: 'key' });
+      }
+    };
+    req.onsuccess = () => { _idbConn = req.result; resolve(_idbConn); };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbGetAll(storeName) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readonly');
+    const store = tx.objectStore(storeName);
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbPutAll(storeName, items) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    const store = tx.objectStore(storeName);
+    store.clear();
+    items.forEach(item => store.put(item));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbGetMeta(key) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('meta', 'readonly');
+    const req = tx.objectStore('meta').get(key);
+    req.onsuccess = () => resolve(req.result ? req.result.value : null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbSetMeta(key, value) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('meta', 'readwrite');
+    tx.objectStore('meta').put({ key, value });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// Seed IDB from server on first load (if server is available)
+async function initialServerSync() {
+  try {
+    const [reminders, completed] = await Promise.all([
+      api('/api/reminders'),
+      api('/api/completed'),
+    ]);
+    // Only seed if IDB is empty (first load from server)
+    const existing = await idbGetAll('reminders');
+    if (existing.length === 0 && reminders.length > 0) {
+      await idbPutAll('reminders', reminders);
+      await idbPutAll('completed', completed);
+      loadReminders();
+      loadCompleted();
+    }
+  } catch (e) { /* standalone mode — no server, that's fine */ }
+}
+
+initialServerSync();
+
+// -- Sync engine --
+const isPWA = window.matchMedia('(display-mode: standalone)').matches
+  || window.navigator.standalone === true
+  || document.referrer.includes('android-app://');
+const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+// Show correct sync UI based on context
+function initSyncUI() {
+  if (isMobile || isPWA) {
+    document.getElementById('syncPhone').style.display = 'block';
+    loadSyncState();
+  } else {
+    document.getElementById('syncDesktop').style.display = 'block';
+  }
+}
+
+// Desktop: generate pairing code
+async function generatePairingCode() {
+  try {
+    const result = await api('/api/pair/generate', 'POST');
+    document.getElementById('pairingCode').textContent = result.code;
+    const expires = new Date(result.expires);
+    document.getElementById('pairingExpiry').textContent =
+      `Expires at ${expires.toLocaleTimeString()}`;
+    document.getElementById('pairingCodeDisplay').style.display = 'block';
+
+    // Auto-hide after 5 min
+    setTimeout(() => {
+      document.getElementById('pairingCodeDisplay').style.display = 'none';
+    }, 5 * 60 * 1000);
+  } catch (e) {
+    alert('Failed to generate pairing code');
+  }
+}
+
+// Phone: pair with server
+async function pairWithServer() {
+  const serverUrl = document.getElementById('syncServerUrl').value.trim();
+  const code = document.getElementById('syncPairCode').value.trim();
+  const errorEl = document.getElementById('pairError');
+  errorEl.style.display = 'none';
+
+  if (!serverUrl || !code) {
+    errorEl.textContent = 'Server address and code are required';
+    errorEl.style.display = 'block';
+    return;
+  }
+
+  // Ensure protocol prefix
+  let url = serverUrl;
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = 'http://' + url;
+  }
+
+  // Generate a persistent device ID
+  let deviceId = localStorage.getItem('nudge-device-id');
+  if (!deviceId) {
+    deviceId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+    localStorage.setItem('nudge-device-id', deviceId);
+  }
+
+  try {
+    const res = await fetch(url + '/api/pair/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, device_id: deviceId }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      errorEl.textContent = data.error || 'Pairing failed';
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    // Save sync config
+    localStorage.setItem('nudge-sync-server', url);
+    localStorage.setItem('nudge-device-id', data.device_id || deviceId);
+    localStorage.setItem('nudge-synced', 'true');
+
+    loadSyncState();
+    syncNow(); // Initial sync
+  } catch (e) {
+    errorEl.textContent = 'Could not reach server. Check the address.';
+    errorEl.style.display = 'block';
+  }
+}
+
+// Load sync state into UI
+function loadSyncState() {
+  const synced = localStorage.getItem('nudge-synced') === 'true';
+  if (synced) {
+    document.getElementById('syncNotPaired').style.display = 'none';
+    document.getElementById('syncPaired').style.display = 'block';
+    document.getElementById('syncedServer').textContent =
+      localStorage.getItem('nudge-sync-server') || 'unknown';
+    const lastSync = localStorage.getItem('nudge-last-sync');
+    if (lastSync) {
+      document.getElementById('lastSyncTime').textContent =
+        'Last sync: ' + formatTime(lastSync);
+    }
+  } else {
+    document.getElementById('syncNotPaired').style.display = 'block';
+    document.getElementById('syncPaired').style.display = 'none';
+  }
+}
+
+// Perform sync
+let _syncInProgress = false;
+
+async function syncNow() {
+  const server = localStorage.getItem('nudge-sync-server');
+  const deviceId = localStorage.getItem('nudge-device-id');
+  if (!server || !deviceId || _syncInProgress) return;
+  _syncInProgress = true;
+
+  try {
+    // Gather local data from IDB (source of truth)
+    const [reminders, completed] = await Promise.all([
+      idbGetAll('reminders'),
+      idbGetAll('completed'),
+    ]);
+
+    const res = await fetch(server + '/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        device_id: deviceId,
+        reminders,
+        completed,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      if (err.error === 'device not paired') {
+        localStorage.removeItem('nudge-synced');
+        loadSyncState();
+        return;
+      }
+      console.warn('Sync failed:', err.error);
+      return;
+    }
+
+    const merged = await res.json();
+
+    // Update IndexedDB with merged data
+    await Promise.all([
+      idbPutAll('reminders', merged.reminders || []),
+      idbPutAll('completed', merged.completed || []),
+    ]);
+
+    localStorage.setItem('nudge-last-sync', new Date().toISOString());
+    loadSyncState();
+
+    // Reload UI
+    loadReminders();
+    loadCompleted();
+  } catch (e) {
+    console.warn('Sync error:', e.message);
+  } finally {
+    _syncInProgress = false;
+  }
+}
+
+// Unpair device
+function unpairDevice() {
+  if (!confirm('Stop syncing with this server? Your local data will be kept.')) return;
+
+  const server = localStorage.getItem('nudge-sync-server');
+  const deviceId = localStorage.getItem('nudge-device-id');
+
+  // Notify server (best-effort)
+  if (server && deviceId) {
+    fetch(server + '/api/pair/unpair', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ device_id: deviceId }),
+    }).catch(() => {});
+  }
+
+  localStorage.removeItem('nudge-synced');
+  localStorage.removeItem('nudge-sync-server');
+  localStorage.removeItem('nudge-last-sync');
+  loadSyncState();
+}
+
+// Auto-sync every 60s if paired
+setInterval(() => {
+  if (localStorage.getItem('nudge-synced') === 'true') {
+    syncNow();
+  }
+}, 60000);
+
+initSyncUI();
 </script>
 </body>
 </html>

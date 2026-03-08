@@ -38,7 +38,7 @@ def main():
 
     # Start Flask in a daemon thread
     flask_thread = threading.Thread(
-        target=lambda: app.run(host="127.0.0.1", port=port, use_reloader=False),
+        target=lambda: app.run(host="0.0.0.0", port=port, use_reloader=False),
         daemon=True,
     )
     flask_thread.start()
