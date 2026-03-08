@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.pyo
+*.ico
+reminders.json
+.claude/
+*.tmp

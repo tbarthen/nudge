@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nudge — DO IT!!!</title>
+<style>
+:root {
+  --bg: #0f0f1a;
+  --surface: #1a1a2e;
+  --card: #16213e;
+  --accent: #e94560;
+  --accent-hover: #d63851;
+  --text: #e0e0e0;
+  --text-muted: #8a8a9a;
+  --success: #2ecc71;
+  --border: #2a2a4a;
+  --input-bg: #0d1b2a;
+}
+
+[data-theme="light"] {
+  --bg: #f5f5f5;
+  --surface: #ffffff;
+  --card: #f0f0f0;
+  --accent: #e94560;
+  --accent-hover: #d63851;
+  --text: #1a1a2e;
+  --text-muted: #666;
+  --success: #27ae60;
+  --border: #ddd;
+  --input-bg: #fff;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  transition: background 0.3s, color 0.3s;
+}
+
+.container {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 0 16px 80px;
+}
+
+/* Header */
+header {
+  text-align: center;
+  padding: 32px 0 24px;
+  position: relative;
+}
+
+header h1 {
+  font-size: 2.8rem;
+  font-weight: 900;
+  color: var(--accent);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+header .subtitle {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-top: 4px;
+}
+
+.settings-btn {
+  position: absolute;
+  top: 32px;
+  right: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.4rem;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  transition: color 0.2s, background 0.2s;
+}
+
+.settings-btn:hover {
+  color: var(--text);
+  background: var(--card);
+}
+
+/* Add reminder */
+.add-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.add-form input {
+  flex: 1;
+  padding: 12px 16px;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.add-form input:focus {
+  border-color: var(--accent);
+}
+
+.add-form input::placeholder {
+  color: var(--text-muted);
+}
+
+.add-form button {
+  padding: 12px 20px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+  white-space: nowrap;
+}
+
+.add-form button:hover { background: var(--accent-hover); }
+.add-form button:active { transform: scale(0.96); }
+
+/* Reminder list */
+.reminder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reminder-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--card);
+  padding: 12px 14px;
+  border-radius: 10px;
+  transition: background 0.2s, transform 0.15s;
+  animation: slideIn 0.2s ease-out;
+  position: relative;
+}
+
+.drag-handle {
+  cursor: grab;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  padding: 4px 2px;
+  flex-shrink: 0;
+  user-select: none;
+  touch-action: none;
+  line-height: 1;
+}
+
+.drag-handle:active { cursor: grabbing; }
+
+.reminder-item.dragging {
+  opacity: 0.4;
+}
+
+.reminder-item.drag-over {
+  border-top: 2px solid var(--accent);
+  margin-top: -2px;
+}
+
+.reminder-item.drag-over-bottom {
+  border-bottom: 2px solid var(--accent);
+  margin-bottom: -2px;
+}
+
+.reminder-list {
+  min-height: 60px;
+  padding-bottom: 40px;
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.reminder-item:hover { background: var(--surface); }
+
+.reminder-item .pin-badge {
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.reminder-item .text {
+  flex: 1;
+  font-size: 1rem;
+  word-break: break-word;
+}
+
+.reminder-item .text.editing {
+  display: none;
+}
+
+.reminder-item .edit-input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 2px solid var(--accent);
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 1rem;
+  outline: none;
+  display: none;
+}
+
+.reminder-item .edit-input.active {
+  display: block;
+}
+
+.reminder-item .actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.btn-icon {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.btn-icon:active { transform: scale(0.9); }
+
+.btn-complete {
+  background: var(--success);
+  color: white;
+}
+
+.btn-complete:hover { background: #27ae60; }
+
+.btn-delete {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.btn-delete:hover { background: var(--accent); color: white; }
+
+.btn-menu {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.btn-menu:hover { background: var(--border); color: var(--text); }
+
+.btn-save {
+  background: var(--accent);
+  color: white;
+}
+
+/* Context menu */
+.context-menu {
+  position: fixed;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 0;
+  min-width: 140px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  z-index: 1000;
+  display: none;
+}
+
+.context-menu.visible { display: block; }
+
+.context-menu button {
+  display: block;
+  width: 100%;
+  padding: 8px 16px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.context-menu button:hover { background: var(--card); }
+
+/* Completed section */
+.completed-section {
+  margin-top: 32px;
+}
+
+.completed-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.completed-header h2 {
+  font-size: 1.3rem;
+  color: var(--success);
+  font-weight: 800;
+}
+
+.completed-header .arrow {
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  transition: transform 0.2s;
+}
+
+.completed-header .arrow.open { transform: rotate(180deg); }
+
+.completed-list {
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.completed-list.open { display: flex; }
+
+.completed-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--card);
+  border-radius: 8px;
+  opacity: 0.7;
+}
+
+.completed-item .text {
+  flex: 1;
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.completed-item .time {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Settings panel */
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 999;
+  display: none;
+  justify-content: center;
+  align-items: center;
+}
+
+.settings-overlay.visible { display: flex; }
+
+.settings-panel {
+  background: var(--surface);
+  border-radius: 16px;
+  padding: 24px;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.4);
+}
+
+.settings-panel h2 {
+  font-size: 1.3rem;
+  margin-bottom: 20px;
+  color: var(--accent);
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.setting-row:last-child { border-bottom: none; }
+
+.setting-row label {
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
+.setting-row select,
+.setting-row input[type="number"] {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.theme-toggle {
+  display: flex;
+  gap: 4px;
+  background: var(--card);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.theme-toggle button {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+}
+
+.theme-toggle button.active {
+  background: var(--accent);
+  color: white;
+}
+
+.settings-close {
+  margin-top: 16px;
+  width: 100%;
+  padding: 10px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.settings-close:hover { background: var(--accent-hover); }
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 48px 16px;
+  color: var(--text-muted);
+}
+
+.empty-state .emoji {
+  font-size: 2.5rem;
+  margin-bottom: 12px;
+}
+
+.empty-state p {
+  font-size: 1rem;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  header h1 { font-size: 2.2rem; }
+  .container { padding: 0 12px 80px; }
+  .add-form { flex-direction: column; }
+  .add-form button { width: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>DO IT!!!</h1>
+    <div class="subtitle">Your daily nudge</div>
+    <button class="settings-btn" onclick="toggleSettings()" title="Settings">&#9881;</button>
+  </header>
+
+  <form class="add-form" onsubmit="addReminder(event)">
+    <input type="text" id="newReminder" placeholder="What needs doing?" autocomplete="off">
+    <button type="submit">Add</button>
+  </form>
+
+  <div class="reminder-list" id="reminderList"></div>
+
+  <div class="completed-section" id="completedSection" style="display:none">
+    <div class="completed-header" onclick="toggleCompleted()">
+      <h2>You DID it!!!</h2>
+      <span class="arrow" id="completedArrow">&#9660;</span>
+    </div>
+    <div class="completed-list" id="completedList"></div>
+  </div>
+</div>
+
+<!-- Context menu -->
+<div class="context-menu" id="contextMenu"></div>
+
+<!-- Settings overlay -->
+<div class="settings-overlay" id="settingsOverlay" onclick="closeSettingsOutside(event)">
+  <div class="settings-panel">
+    <h2>Settings</h2>
+    <div class="setting-row">
+      <label>Popup interval</label>
+      <select id="intervalSelect" onchange="updateConfig()">
+        <option value="1">1 min (test)</option>
+        <option value="15">15 min</option>
+        <option value="30">30 min</option>
+        <option value="45">45 min</option>
+        <option value="60" selected>60 min</option>
+        <option value="90">90 min</option>
+        <option value="120">2 hours</option>
+      </select>
+    </div>
+    <div class="setting-row">
+      <label>Theme</label>
+      <div class="theme-toggle" id="themeToggle">
+        <button onclick="setTheme('light')">Light</button>
+        <button onclick="setTheme('dark')" class="active">Dark</button>
+        <button onclick="setTheme('system')">System</button>
+      </div>
+    </div>
+    <button class="settings-close" onclick="toggleSettings()">Done</button>
+  </div>
+</div>
+
+<script>
+const API = '';
+let currentTheme = localStorage.getItem('nudge-theme') || 'dark';
+
+// -- API helpers --
+async function api(path, method = 'GET', body = null) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(API + path, opts);
+  return res.json();
+}
+
+// -- Reminders --
+async function loadReminders() {
+  const list = document.getElementById('reminderList');
+  const reminders = await api('/api/reminders');
+
+  if (reminders.length === 0) {
+    list.innerHTML = '<div class="empty-state"><div class="emoji">&#128170;</div><p>No reminders yet. Add one above!<br><span style="font-size:0.8rem;color:var(--text-muted)">e.g. "Eat spaghetti with hand tied behind back"</span></p></div>';
+    return;
+  }
+
+  list.innerHTML = reminders.map((r, idx) => {
+    const safeId = escapeAttr(r.id);
+    return `
+    <div class="reminder-item" data-id="${safeId}" data-order="${parseInt(r.order) || 0}" draggable="true">
+      <span class="drag-handle" title="Drag to reorder">&#9776;</span>
+      ${r.pinned ? '<span class="pin-badge" title="Pinned">&#128204;</span>' : ''}
+      <span class="text">${escapeHtml(r.text)}</span>
+      <input class="edit-input" type="text" value="${escapeAttr(r.text)}">
+      <div class="actions">
+        <button class="btn-icon btn-save" style="display:none" onclick="saveEdit('${safeId}', this)" title="Save">&#10003;</button>
+        <button class="btn-icon btn-complete" onclick="completeReminder('${safeId}')" title="Complete">&#10003;</button>
+        <button class="btn-icon btn-menu" onclick="showMenu(event, '${safeId}', ${!!r.pinned}, ${idx}, ${reminders.length})" title="More">&#8942;</button>
+      </div>
+    </div>`;
+  }).join('');
+  initDragAndDrop();
+}
+
+async function addReminder(e) {
+  e.preventDefault();
+  const input = document.getElementById('newReminder');
+  const text = input.value.trim();
+  if (!text) return;
+  await api('/api/reminders', 'POST', { text });
+  input.value = '';
+  loadReminders();
+  loadCompleted();
+}
+
+async function completeReminder(id) {
+  await api(`/api/reminders/${id}/complete`, 'PATCH');
+  loadReminders();
+  loadCompleted();
+}
+
+async function deleteReminder(id) {
+  await api(`/api/reminders/${id}`, 'DELETE');
+  loadReminders();
+}
+
+function startEdit(id) {
+  hideMenu();
+  const item = document.querySelector(`.reminder-item[data-id="${id}"]`);
+  if (!item) return;
+  item.querySelector('.text').classList.add('editing');
+  const input = item.querySelector('.edit-input');
+  input.classList.add('active');
+  input.focus();
+  input.select();
+  item.querySelector('.btn-complete').style.display = 'none';
+  item.querySelector('.btn-menu').style.display = 'none';
+  item.querySelector('.btn-save').style.display = 'flex';
+
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter') saveEdit(id, item.querySelector('.btn-save'));
+    if (e.key === 'Escape') loadReminders();
+  };
+}
+
+async function saveEdit(id, btn) {
+  const item = btn.closest('.reminder-item');
+  const newText = item.querySelector('.edit-input').value.trim();
+  if (newText) {
+    await api(`/api/reminders/${id}`, 'PUT', { text: newText });
+  }
+  loadReminders();
+}
+
+async function togglePin(id, currentlyPinned) {
+  await api(`/api/reminders/${id}`, 'PUT', { pinned: !currentlyPinned });
+  hideMenu();
+  loadReminders();
+}
+
+// -- Context menu --
+function showMenu(e, id, pinned, idx, total) {
+  e.stopPropagation();
+  const menu = document.getElementById('contextMenu');
+  let html = `
+    <button onclick="startEdit('${id}')">Edit</button>
+    <button onclick="togglePin('${id}', ${pinned})">${pinned ? 'Unpin' : 'Pin to top'}</button>`;
+  if (idx > 0) html += `<button onclick="moveReminder('${id}', 'up'); hideMenu()">&#9650; Move up</button>`;
+  if (idx < total - 1) html += `<button onclick="moveReminder('${id}', 'down'); hideMenu()">&#9660; Move down</button>`;
+  html += `<button onclick="deleteReminder('${id}'); hideMenu()">Delete</button>`;
+  menu.innerHTML = html;
+  const rect = e.target.getBoundingClientRect();
+  menu.style.top = rect.bottom + 4 + 'px';
+  menu.style.left = Math.min(rect.left, window.innerWidth - 160) + 'px';
+  menu.classList.add('visible');
+}
+
+function hideMenu() {
+  document.getElementById('contextMenu').classList.remove('visible');
+}
+
+document.addEventListener('click', hideMenu);
+
+// -- Completed --
+async function loadCompleted() {
+  const completed = await api('/api/completed');
+  const section = document.getElementById('completedSection');
+  const list = document.getElementById('completedList');
+
+  if (completed.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+
+  section.style.display = 'block';
+  list.innerHTML = completed.map(c => `
+    <div class="completed-item">
+      <span class="text">${escapeHtml(c.text)}</span>
+      <span class="time">${formatTime(c.completed_at)}</span>
+    </div>
+  `).join('');
+}
+
+function toggleCompleted() {
+  const list = document.getElementById('completedList');
+  const arrow = document.getElementById('completedArrow');
+  list.classList.toggle('open');
+  arrow.classList.toggle('open');
+}
+
+// -- Settings --
+async function loadConfig() {
+  const config = await api('/api/config');
+  document.getElementById('intervalSelect').value = config.popup_interval_minutes;
+}
+
+async function updateConfig() {
+  const interval = parseInt(document.getElementById('intervalSelect').value);
+  await api('/api/config', 'PUT', { popup_interval_minutes: interval });
+}
+
+function toggleSettings() {
+  document.getElementById('settingsOverlay').classList.toggle('visible');
+}
+
+function closeSettingsOutside(e) {
+  if (e.target === document.getElementById('settingsOverlay')) {
+    toggleSettings();
+  }
+}
+
+// -- Theme --
+function setTheme(theme) {
+  currentTheme = theme;
+  localStorage.setItem('nudge-theme', theme);
+  applyTheme();
+  document.querySelectorAll('#themeToggle button').forEach(b => b.classList.remove('active'));
+  document.querySelector(`#themeToggle button[onclick="setTheme('${theme}')"]`).classList.add('active');
+}
+
+function applyTheme() {
+  let effective = currentTheme;
+  if (effective === 'system') {
+    effective = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  }
+  document.documentElement.setAttribute('data-theme', effective);
+}
+
+// -- Helpers --
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function escapeAttr(s) {
+  return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function formatTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const now = new Date();
+  const diff = now - d;
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+  if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+  return d.toLocaleDateString();
+}
+
+// -- Reorder --
+async function moveReminder(id, direction) {
+  const items = [...document.querySelectorAll('.reminder-item')];
+  const idx = items.findIndex(el => el.dataset.id === id);
+  if (idx < 0) return;
+  const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+  if (swapIdx < 0 || swapIdx >= items.length) return;
+  // Swap orders between the two items
+  const orderA = parseInt(items[idx].dataset.order);
+  const orderB = parseInt(items[swapIdx].dataset.order);
+  await api('/api/reminders/reorder', 'POST', [
+    { id: items[idx].dataset.id, order: orderB },
+    { id: items[swapIdx].dataset.id, order: orderA }
+  ]);
+  loadReminders();
+}
+
+function initDragAndDrop() {
+  const list = document.getElementById('reminderList');
+  const items = list.querySelectorAll('.reminder-item');
+  let dragItem = null;
+
+  // List-level drop zone — handles dropping below the last item
+  list.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    // If not over any item, treat as "drop at end"
+    const overItem = e.target.closest('.reminder-item');
+    if (!overItem && dragItem) {
+      items.forEach(i => i.classList.remove('drag-over'));
+      // Highlight last item's bottom edge
+      const lastItem = items[items.length - 1];
+      if (lastItem && lastItem !== dragItem) lastItem.classList.add('drag-over-bottom');
+    }
+  });
+
+  list.addEventListener('dragleave', e => {
+    if (!list.contains(e.relatedTarget)) {
+      items.forEach(i => { i.classList.remove('drag-over'); i.classList.remove('drag-over-bottom'); });
+    }
+  });
+
+  list.addEventListener('drop', async e => {
+    e.preventDefault();
+    const overItem = e.target.closest('.reminder-item');
+    items.forEach(i => { i.classList.remove('drag-over'); i.classList.remove('drag-over-bottom'); });
+    // Only handle drops that didn't land on a specific item (those are handled per-item)
+    if (overItem || !dragItem) return;
+
+    // Move dragged item to end
+    const allItems = [...list.querySelectorAll('.reminder-item')];
+    const fromIdx = allItems.indexOf(dragItem);
+    allItems.splice(fromIdx, 1);
+    allItems.push(dragItem);
+
+    const reorder = allItems.map((el, i) => ({
+      id: el.dataset.id,
+      order: allItems.length - 1 - i
+    }));
+    await api('/api/reminders/reorder', 'POST', reorder);
+    loadReminders();
+  });
+
+  items.forEach(item => {
+    // Desktop drag events
+    item.addEventListener('dragstart', e => {
+      dragItem = item;
+      item.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', item.dataset.id);
+    });
+
+    item.addEventListener('dragend', () => {
+      item.classList.remove('dragging');
+      items.forEach(i => { i.classList.remove('drag-over'); i.classList.remove('drag-over-bottom'); });
+      dragItem = null;
+    });
+
+    item.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'move';
+      if (item !== dragItem) {
+        items.forEach(i => { i.classList.remove('drag-over'); i.classList.remove('drag-over-bottom'); });
+        // Determine if dropping above or below based on cursor position
+        const rect = item.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        if (e.clientY > midY) {
+          item.classList.add('drag-over-bottom');
+        } else {
+          item.classList.add('drag-over');
+        }
+      }
+    });
+
+    item.addEventListener('dragleave', () => {
+      item.classList.remove('drag-over');
+      item.classList.remove('drag-over-bottom');
+    });
+
+    item.addEventListener('drop', async e => {
+      e.preventDefault();
+      e.stopPropagation();
+      items.forEach(i => { i.classList.remove('drag-over'); i.classList.remove('drag-over-bottom'); });
+      if (!dragItem || item === dragItem) return;
+
+      // Determine insert position based on cursor vs midpoint
+      const rect = item.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      const insertAfter = e.clientY > midY;
+
+      const allItems = [...list.querySelectorAll('.reminder-item')];
+      const fromIdx = allItems.indexOf(dragItem);
+      let toIdx = allItems.indexOf(item);
+      allItems.splice(fromIdx, 1);
+      // Adjust toIdx after removal
+      if (fromIdx < toIdx) toIdx--;
+      if (insertAfter) toIdx++;
+      allItems.splice(toIdx, 0, dragItem);
+
+      // Assign descending orders (highest = first)
+      const reorder = allItems.map((el, i) => ({
+        id: el.dataset.id,
+        order: allItems.length - 1 - i
+      }));
+      await api('/api/reminders/reorder', 'POST', reorder);
+      loadReminders();
+    });
+
+    // Touch drag support (long-press to initiate)
+    const handle = item.querySelector('.drag-handle');
+    let touchTimeout = null;
+    let touchDragging = false;
+    let touchClone = null;
+    let touchStartY = 0;
+
+    handle.addEventListener('touchstart', e => {
+      touchStartY = e.touches[0].clientY;
+      touchTimeout = setTimeout(() => {
+        touchDragging = true;
+        dragItem = item;
+        item.classList.add('dragging');
+        // Create floating clone
+        touchClone = item.cloneNode(true);
+        touchClone.style.cssText = `position:fixed;left:${item.getBoundingClientRect().left}px;top:${e.touches[0].clientY - 20}px;width:${item.offsetWidth}px;opacity:0.8;z-index:9999;pointer-events:none;`;
+        document.body.appendChild(touchClone);
+        if (navigator.vibrate) navigator.vibrate(30);
+      }, 400);
+    }, { passive: true });
+
+    handle.addEventListener('touchmove', e => {
+      if (!touchDragging) {
+        if (Math.abs(e.touches[0].clientY - touchStartY) > 10) {
+          clearTimeout(touchTimeout);
+        }
+        return;
+      }
+      e.preventDefault();
+      const y = e.touches[0].clientY;
+      if (touchClone) touchClone.style.top = (y - 20) + 'px';
+
+      // Find which item we're over
+      items.forEach(i => i.classList.remove('drag-over'));
+      const overEl = document.elementFromPoint(e.touches[0].clientX, y);
+      const overItem = overEl ? overEl.closest('.reminder-item') : null;
+      if (overItem && overItem !== dragItem) {
+        overItem.classList.add('drag-over');
+      }
+    }, { passive: false });
+
+    handle.addEventListener('touchend', async () => {
+      clearTimeout(touchTimeout);
+      if (touchClone) {
+        document.body.removeChild(touchClone);
+        touchClone = null;
+      }
+      if (!touchDragging) return;
+      touchDragging = false;
+      item.classList.remove('dragging');
+
+      const overItem = document.querySelector('.reminder-item.drag-over');
+      items.forEach(i => i.classList.remove('drag-over'));
+      if (!overItem || overItem === dragItem) { dragItem = null; return; }
+
+      const allItems = [...list.querySelectorAll('.reminder-item')];
+      const fromIdx = allItems.indexOf(dragItem);
+      const toIdx = allItems.indexOf(overItem);
+      allItems.splice(fromIdx, 1);
+      allItems.splice(toIdx, 0, dragItem);
+
+      const reorder = allItems.map((el, i) => ({
+        id: el.dataset.id,
+        order: allItems.length - 1 - i
+      }));
+      await api('/api/reminders/reorder', 'POST', reorder);
+      dragItem = null;
+      loadReminders();
+    });
+
+    handle.addEventListener('touchcancel', () => {
+      clearTimeout(touchTimeout);
+      touchDragging = false;
+      item.classList.remove('dragging');
+      items.forEach(i => i.classList.remove('drag-over'));
+      if (touchClone) { document.body.removeChild(touchClone); touchClone = null; }
+    });
+  });
+}
+
+// -- Init --
+applyTheme();
+window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+  if (currentTheme === 'system') applyTheme();
+});
+
+// Set correct theme toggle button
+document.querySelectorAll('#themeToggle button').forEach(b => b.classList.remove('active'));
+const activeBtn = document.querySelector(`#themeToggle button[onclick="setTheme('${currentTheme}')"]`);
+if (activeBtn) activeBtn.classList.add('active');
+
+loadReminders();
+loadCompleted();
+loadConfig();
+
+// Auto-refresh every 30s
+setInterval(() => { loadReminders(); loadCompleted(); }, 30000);
+</script>
+</body>
+</html>
