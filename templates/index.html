@@ -1823,6 +1823,16 @@ if (activeBtn) activeBtn.classList.add('active');
     openShare();
     history.replaceState(null, '', window.location.pathname);
   }
+
+  // Auto-pair from QR code URL params (?server=IP:PORT&code=123456)
+  const urlParams = new URLSearchParams(window.location.search);
+  const qrServer = urlParams.get('server');
+  const qrCode = urlParams.get('code');
+  if (qrServer && qrCode) {
+    // Clean URL immediately
+    history.replaceState(null, '', window.location.pathname);
+    await autoPairFromQR(qrServer, qrCode);
+  }
 })();
 
 // Auto-refresh every 30s
@@ -1948,6 +1958,37 @@ async function generatePairingCode() {
   } catch (e) {
     alert('Failed to generate pairing code');
   }
+}
+
+// Auto-pair from QR code (no user interaction needed)
+async function autoPairFromQR(server, code) {
+  let url = server;
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = 'http://' + url;
+  }
+
+  let deviceId = localStorage.getItem('nudge-device-id');
+  if (!deviceId) {
+    deviceId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+    localStorage.setItem('nudge-device-id', deviceId);
+  }
+
+  try {
+    const res = await fetch(url + '/api/pair/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, device_id: deviceId }),
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      localStorage.setItem('nudge-sync-server', url);
+      localStorage.setItem('nudge-device-id', data.device_id || deviceId);
+      localStorage.setItem('nudge-synced', 'true');
+      loadSyncState();
+      syncNow();
+    }
+  } catch (e) { /* silent — user can pair manually if QR fails */ }
 }
 
 // Phone: pair with server

@@ -1,6 +1,7 @@
 import json
 import os
 import secrets
+import socket
 import tempfile
 import threading
 import uuid
@@ -404,7 +405,15 @@ def generate_pairing_code():
             "code": code,
             "expires": expires,
         }
-    return jsonify({"code": code, "expires": expires})
+    # Include local IP so phone knows where to connect
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        local_ip = "127.0.0.1"
+    return jsonify({"code": code, "expires": expires, "ip": local_ip})
 
 
 @app.route("/api/pair/validate", methods=["POST"])

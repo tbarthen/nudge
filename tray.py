@@ -134,6 +134,70 @@ def _timer_loop(stop_event):
                 popup.show_popup(port)
 
 
+def _pair_phone(port):
+    """Generate a pairing QR code and show it in a dialog."""
+    import tkinter as tk
+    import qrcode
+    import io
+
+    def do_pair():
+        # Generate code via API
+        try:
+            url = f"http://localhost:{port}/api/pair/generate"
+            req = urllib.request.Request(url, method="POST", data=b"")
+            req.add_header("Content-Type", "application/json")
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                result = json.loads(resp.read().decode())
+                code = result.get("code", "???")
+                local_ip = result.get("ip", "?.?.?.?")
+        except Exception:
+            code = "Error"
+            local_ip = "?"
+
+        # Build URL that auto-pairs when opened
+        pair_url = f"https://tbarthen.github.io/nudge/?server={local_ip}:{port}&code={code}"
+
+        # Generate QR code image
+        qr = qrcode.QRCode(box_size=6, border=2)
+        qr.add_data(pair_url)
+        qr.make(fit=True)
+        qr_img = qr.make_image(fill_color="#e0e0e0", back_color=popup.BG).convert("RGBA")
+
+        win = tk.Toplevel(popup._root)
+        win.overrideredirect(True)
+        win.attributes("-topmost", True)
+        win.configure(bg=popup.BG)
+
+        screen_w = win.winfo_screenwidth()
+        screen_h = win.winfo_screenheight()
+        qr_size = qr_img.size[0]
+        w = max(qr_size + 40, 300)
+        h = qr_size + 120
+        win.geometry(f"{w}x{h}+{(screen_w - w) // 2}+{(screen_h - h) // 2}")
+
+        tk.Label(win, text="Scan to pair phone", font=("Segoe UI", 14, "bold"),
+                 bg=popup.BG, fg=popup.ACCENT).pack(pady=(16, 8))
+
+        # Display QR code
+        from PIL import ImageTk
+        tk_img = ImageTk.PhotoImage(qr_img)
+        qr_label = tk.Label(win, image=tk_img, bg=popup.BG)
+        qr_label.image = tk_img  # prevent garbage collection
+        qr_label.pack(pady=(0, 4))
+
+        tk.Label(win, text="Expires in 5 minutes",
+                 font=("Segoe UI", 8), bg=popup.BG, fg="#5a5a7a").pack(pady=(2, 8))
+
+        tk.Button(win, text="Done", font=("Segoe UI", 10),
+                  bg=popup.CARD_BG, fg=popup.FG, bd=0, padx=12, cursor="hand2",
+                  command=win.destroy).pack()
+
+        win.bind("<Escape>", lambda e: win.destroy())
+
+    if popup._root:
+        popup._root.after(0, do_pair)
+
+
 def _share_app(port):
     """Show a share dialog with the GitHub repo link."""
     import tkinter as tk
@@ -196,6 +260,10 @@ def run_tray(stop_event=None):
         port = _get_port()
         popup.show_popup(port)
 
+    def on_pair(icon, item):
+        port = _get_port()
+        _pair_phone(port)
+
     def on_share(icon, item):
         port = _get_port()
         _share_app(port)
@@ -206,6 +274,7 @@ def run_tray(stop_event=None):
 
     menu = pystray.Menu(
         pystray.MenuItem("Show Reminders", on_show_reminders, default=True, visible=False),
+        pystray.MenuItem("Pair Phone", on_pair),
         pystray.MenuItem("Share", on_share),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Quit", on_quit),
