@@ -2012,16 +2012,27 @@ async function scanQRToPair() {
 
   // Check for camera support
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    errorEl.textContent = 'Camera not available. Use manual pairing below.';
+    errorEl.innerHTML = 'Camera not available. Tap <b>"Enter manually"</b> below.';
     errorEl.style.display = 'block';
     return;
   }
 
   // Check for BarcodeDetector support
   if (!('BarcodeDetector' in window)) {
-    errorEl.textContent = 'QR scanning not supported in this browser. Use manual pairing below.';
+    errorEl.innerHTML = 'QR scanning not supported in this browser. Tap <b>"Enter manually"</b> below.';
     errorEl.style.display = 'block';
     return;
+  }
+
+  // Pre-check camera permission state
+  if (navigator.permissions) {
+    try {
+      const perm = await navigator.permissions.query({ name: 'camera' });
+      if (perm.state === 'denied') {
+        showCameraBlockedHelp(errorEl);
+        return;
+      }
+    } catch (e) { /* permissions API may not support camera query — proceed anyway */ }
   }
 
   const video = document.getElementById('qrVideo');
@@ -2056,9 +2067,25 @@ async function scanQRToPair() {
     }
     _qrAnimFrame = requestAnimationFrame(scanFrame);
   } catch (e) {
-    errorEl.textContent = 'Could not access camera. Check permissions.';
-    errorEl.style.display = 'block';
+    if (e.name === 'NotAllowedError') {
+      showCameraBlockedHelp(errorEl);
+    } else {
+      errorEl.innerHTML = 'Could not start camera. Tap <b>"Enter manually"</b> below.';
+      errorEl.style.display = 'block';
+    }
   }
+}
+
+function showCameraBlockedHelp(errorEl) {
+  errorEl.innerHTML = `
+    <b>Camera access blocked.</b> To fix:<br>
+    1. Tap the <b>lock icon</b> (or tune icon) in the address bar<br>
+    2. Set <b>Camera</b> to <b>Allow</b><br>
+    3. Tap <b>"Scan QR to Pair"</b> again<br><br>
+    <span style="font-size:0.7rem;color:var(--text-muted)">
+      Or: Android Settings → Apps → Chrome → Permissions → Camera → Allow
+    </span>`;
+  errorEl.style.display = 'block';
 }
 
 function stopQRScan() {
