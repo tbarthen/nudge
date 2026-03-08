@@ -4,7 +4,7 @@ import json
 import os
 import threading
 import time
-import webbrowser
+
 import urllib.request
 
 import pystray
@@ -134,6 +134,57 @@ def _timer_loop(stop_event):
                 popup.show_popup(port)
 
 
+def _share_app(port):
+    """Show a share dialog with the GitHub repo link."""
+    import tkinter as tk
+
+    def do_share():
+        win = tk.Toplevel(popup._root)
+        win.overrideredirect(True)
+        win.attributes("-topmost", True)
+        win.configure(bg=popup.BG)
+
+        screen_w = win.winfo_screenwidth()
+        screen_h = win.winfo_screenheight()
+        w, h = 360, 180
+        win.geometry(f"{w}x{h}+{(screen_w - w) // 2}+{(screen_h - h) // 2}")
+
+        tk.Label(win, text="Share Nudge", font=("Segoe UI", 14, "bold"),
+                 bg=popup.BG, fg=popup.ACCENT).pack(pady=(16, 4))
+        tk.Label(win, text="Give someone their own copy of Nudge",
+                 font=("Segoe UI", 9), bg=popup.BG, fg="#8a8a9a").pack(pady=(0, 12))
+
+        url = "https://tbarthen.github.io/nudge/"
+        url_var = tk.StringVar(value=url)
+        entry = tk.Entry(win, textvariable=url_var, font=("Consolas", 10),
+                         bg=popup.CARD_BG, fg=popup.FG, bd=0, readonlybackground=popup.CARD_BG,
+                         state="readonly", justify="center")
+        entry.pack(fill="x", padx=24, ipady=4)
+
+        btn_frame = tk.Frame(win, bg=popup.BG)
+        btn_frame.pack(pady=12)
+
+        def copy_link():
+            win.clipboard_clear()
+            win.clipboard_append(url)
+            copy_btn.configure(text="Copied!")
+            win.after(1500, lambda: copy_btn.configure(text="Copy link"))
+
+        copy_btn = tk.Button(btn_frame, text="Copy link", font=("Segoe UI", 10),
+                             bg=popup.ACCENT, fg="white", bd=0, padx=12, cursor="hand2",
+                             command=copy_link)
+        copy_btn.pack(side="left", padx=4)
+
+        tk.Button(btn_frame, text="Done", font=("Segoe UI", 10),
+                  bg=popup.CARD_BG, fg=popup.FG, bd=0, padx=12, cursor="hand2",
+                  command=win.destroy).pack(side="left", padx=4)
+
+        win.bind("<Escape>", lambda e: win.destroy())
+
+    if popup._root:
+        popup._root.after(0, do_share)
+
+
 def run_tray(stop_event=None):
     """Run the system tray icon. Blocks on main thread or calling thread."""
     if stop_event is None:
@@ -141,25 +192,21 @@ def run_tray(stop_event=None):
 
     generate_icon()
 
-    def on_open_web(icon, item):
-        port = _get_port()
-        webbrowser.open(f"http://localhost:{port}")
-
     def on_show_reminders(icon, item):
         port = _get_port()
         popup.show_popup(port)
+
+    def on_share(icon, item):
+        port = _get_port()
+        _share_app(port)
 
     def on_quit(icon, item):
         stop_event.set()
         icon.stop()
 
-    def on_left_click(icon):
-        port = _get_port()
-        webbrowser.open(f"http://localhost:{port}")
-
     menu = pystray.Menu(
-        pystray.MenuItem("Show Reminders", on_show_reminders, default=True),
-        pystray.MenuItem("Open Web UI", on_open_web),
+        pystray.MenuItem("Show Reminders", on_show_reminders, default=True, visible=False),
+        pystray.MenuItem("Share", on_share),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Quit", on_quit),
     )

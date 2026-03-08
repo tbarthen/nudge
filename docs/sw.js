@@ -1,7 +1,7 @@
 const CACHE_NAME = 'nudge-v2';
 const ASSETS = [
-  '/',
-  '/static/manifest.json',
+  './',
+  'manifest.json',
 ];
 
 // Install — cache shell assets
@@ -22,16 +22,15 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
-// Fetch — network-first for API, cache-first for assets
+// Fetch — network-first with cache fallback
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
 
-  // API calls: always go to network (offline handled by IndexedDB in app)
+  // API calls: always go to network
   if (url.pathname.startsWith('/api/')) {
     return;
   }
 
-  // Everything else: network-first with cache fallback
   e.respondWith(
     fetch(e.request)
       .then(res => {
