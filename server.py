@@ -64,6 +64,23 @@ def _get_retention_days(data=None):
     return max(1, int(val)) if isinstance(val, (int, float)) else DEFAULT_RETENTION_DAYS
 
 
+MAX_DELETED_IDS = 500  # Cap tracked deletions to prevent unbounded growth
+
+
+def _track_deletion(data, *item_ids):
+    """Record deleted item IDs so sync won't resurrect them from the phone."""
+    if "deleted_ids" not in data:
+        data["deleted_ids"] = []
+    existing = set(data["deleted_ids"])
+    for item_id in item_ids:
+        if _is_safe_id(item_id) and item_id not in existing:
+            data["deleted_ids"].append(item_id)
+            existing.add(item_id)
+    # Cap: keep only the most recent deletions
+    if len(data["deleted_ids"]) > MAX_DELETED_IDS:
+        data["deleted_ids"] = data["deleted_ids"][-MAX_DELETED_IDS:]
+
+
 def _save_data(data):
     # Atomic write: write to temp file then rename
     dir_name = os.path.dirname(DATA_FILE)
@@ -251,6 +268,7 @@ def delete_reminder(reminder_id):
         data["reminders"] = [r for r in data["reminders"] if r["id"] != reminder_id]
         if len(data["reminders"]) == original_len:
             return jsonify({"error": "not found"}), 404
+        _track_deletion(data, reminder_id)
         _save_data(data)
     return jsonify({"ok": True})
 
@@ -295,6 +313,7 @@ def batch_delete():
         before = len(data["reminders"])
         data["reminders"] = [r for r in data["reminders"] if r["id"] not in ids]
         deleted = before - len(data["reminders"])
+        _track_deletion(data, *ids)
         _save_data(data)
     return jsonify({"deleted": deleted})
 
@@ -530,6 +549,9 @@ def sync_data():
         server_reminders = data["reminders"]
         server_completed = data["completed"]
 
+        # IDs that were explicitly deleted on the server — never resurrect these
+        deleted_ids = set(data.get("deleted_ids", []))
+
         # Build lookup maps by ID
         s_rem = {r["id"]: r for r in server_reminders}
         s_comp = {c["id"]: c for c in server_completed}
@@ -542,6 +564,10 @@ def sync_data():
         merged_completed = []
 
         for item_id in all_ids:
+            # Skip items explicitly deleted on the server
+            if item_id in deleted_ids:
+                continue
+
             in_s_rem = item_id in s_rem
             in_s_comp = item_id in s_comp
             in_p_rem = item_id in p_rem
@@ -600,4 +626,5 @@ def sync_data():
     return jsonify({
         "reminders": merged_reminders,
         "completed": merged_completed,
+        "deleted_ids": list(deleted_ids),
     })

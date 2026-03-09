@@ -288,10 +288,13 @@ def _resize_to_fit(num_items):
 
 
 def _hide_popup():
-    global popup_visible
+    global popup_visible, _auto_refresh_id
     with _popup_lock:
         popup_visible = False
     if _root:
+        if _auto_refresh_id is not None:
+            _root.after_cancel(_auto_refresh_id)
+            _auto_refresh_id = None
         _root.withdraw()
 
 
@@ -501,6 +504,63 @@ def _drag_end(event):
     threading.Thread(target=bg, daemon=True).start()
 
 
+def _animate_remove(row, on_done):
+    """Animate a row removal: dim + fade to background, then callback."""
+    root = _root
+    if not root:
+        on_done()
+        return
+
+    # BG color as RGB tuple for interpolation target
+    # BG = "#1a1a2e" -> (26, 26, 46)
+    bg_r, bg_g, bg_b = 26, 26, 46
+    # Start color: reddish tint to signal removal
+    start_r, start_g, start_b = 60, 24, 30
+
+    steps = 6
+    delay = 50
+
+    # Step 0: instantly dim row with red tint, grey out text and hide buttons
+    def _apply_to_children(bg_hex, fg_hex):
+        for child in row.winfo_children():
+            try:
+                child.configure(bg=bg_hex)
+                if isinstance(child, tk.Label):
+                    child.configure(fg=fg_hex)
+                elif isinstance(child, tk.Button):
+                    child.configure(state="disabled", bg=bg_hex, fg=bg_hex)
+            except tk.TclError:
+                pass
+
+    try:
+        row.configure(bg=f"#{start_r:02x}{start_g:02x}{start_b:02x}")
+        _apply_to_children(f"#{start_r:02x}{start_g:02x}{start_b:02x}", "#666666")
+    except tk.TclError:
+        on_done()
+        return
+
+    def fade(step):
+        if step >= steps:
+            on_done()
+            return
+        t = (step + 1) / steps  # 0→1 progress
+        r = int(start_r + (bg_r - start_r) * t)
+        g = int(start_g + (bg_g - start_g) * t)
+        b = int(start_b + (bg_b - start_b) * t)
+        fg_val = max(0, int(102 * (1 - t)))
+        bg_hex = f"#{r:02x}{g:02x}{b:02x}"
+        fg_hex = f"#{fg_val:02x}{fg_val:02x}{fg_val:02x}"
+        try:
+            row.configure(bg=bg_hex)
+            _apply_to_children(bg_hex, fg_hex)
+        except tk.TclError:
+            on_done()
+            return
+        root.after(delay, lambda: fade(step + 1))
+
+    root.after(delay, lambda: fade(0))
+
+
 def _populate_list(reminders, is_cache=False):
     """Populate the list with fetched reminders. Called on the Tk thread."""
     global popup_visible
@@ -564,18 +624,21 @@ def _populate_list(reminders, is_cache=False):
 
         rid = reminder["id"]
 
-        def make_complete(r_id):
+        def make_complete(r_id, r_row):
             def do_complete():
-                def bg():
-                    _api_call(port, f"/api/reminders/{r_id}/complete", "PATCH")
-                    root.after(0, _rebuild_list)
-                threading.Thread(target=bg, daemon=True).start()
+                # Animate immediately, then fire API + rebuild
+                def after_anim():
+                    def bg():
+                        _api_call(port, f"/api/reminders/{r_id}/complete", "PATCH")
+                        root.after(0, _rebuild_list)
+                    threading.Thread(target=bg, daemon=True).start()
+                _animate_remove(r_row, after_anim)
             return do_complete
 
         tk.Button(row, text="\u2713", font=btn_font, bg="#2ecc71", fg="white",
-                  bd=0, width=3, cursor="hand2", command=make_complete(rid)).pack(side="right", padx=(4, 0))
+                  bd=0, width=3, cursor="hand2", command=make_complete(rid, row)).pack(side="right", padx=(4, 0))
 
-        def make_menu(r_id, r_text, r_pinned, r_idx, r_total, widget):
+        def make_menu(r_id, r_text, r_pinned, r_idx, r_total, widget, r_row):
             def show_menu():
                 menu = tk.Menu(root, tearoff=0, bg=CARD_BG, fg=FG,
                                activebackground=ACCENT, activeforeground="white")
@@ -584,10 +647,12 @@ def _populate_list(reminders, is_cache=False):
                     _show_edit_dialog(root, port, r_id, r_text)
 
                 def do_delete():
-                    def bg():
-                        _api_delete(port, f"/api/reminders/{r_id}")
-                        root.after(0, _rebuild_list)
-                    threading.Thread(target=bg, daemon=True).start()
+                    def after_anim():
+                        def bg():
+                            _api_delete(port, f"/api/reminders/{r_id}")
+                            root.after(0, _rebuild_list)
+                        threading.Thread(target=bg, daemon=True).start()
+                    _animate_remove(r_row, after_anim)
 
                 def do_toggle_pin():
                     def bg():
@@ -610,6 +675,11 @@ def _populate_list(reminders, is_cache=False):
                         root.after(0, _rebuild_list)
                     threading.Thread(target=bg, daemon=True).start()
 
+                def do_copy():
+                    root.clipboard_clear()
+                    root.clipboard_append(r_text)
+
+                menu.add_command(label="Copy", command=do_copy)
                 menu.add_command(label="Edit", command=do_edit)
                 if r_idx > 0:
                     menu.add_command(label="\u25B2 Move up", command=lambda: do_move("up"))
@@ -626,7 +696,7 @@ def _populate_list(reminders, is_cache=False):
 
         dots_btn = tk.Button(row, text="\u22EE", font=btn_font, bg=BTN_BG, fg=FG,
                              bd=0, width=2, cursor="hand2")
-        dots_btn.configure(command=make_menu(rid, reminder["text"], reminder.get("pinned", False), idx, total, dots_btn))
+        dots_btn.configure(command=make_menu(rid, reminder["text"], reminder.get("pinned", False), idx, total, dots_btn, row))
         dots_btn.pack(side="right", padx=(4, 0))
 
 
@@ -675,9 +745,23 @@ def start_popup_thread():
     _initialized.wait(timeout=10)
 
 
+_auto_refresh_id = None
+AUTO_REFRESH_MS = 30000  # Refresh every 30s while popup is visible
+
+
+def _auto_refresh():
+    """Periodically refresh the list while the popup is visible."""
+    global _auto_refresh_id
+    if not popup_visible or not _root:
+        _auto_refresh_id = None
+        return
+    _rebuild_list()
+    _auto_refresh_id = _root.after(AUTO_REFRESH_MS, _auto_refresh)
+
+
 def show_popup(port=5123):
     """Show the popup window. Instant since window already exists."""
-    global popup_visible, _port
+    global popup_visible, _port, _auto_refresh_id
     _port = port
 
     with _popup_lock:
@@ -690,9 +774,13 @@ def show_popup(port=5123):
 
     # Show window and refresh content — schedule on the Tk thread
     def do_show():
+        global _auto_refresh_id
         _root.deiconify()
         _root.lift()
         _root.attributes("-topmost", True)
         _rebuild_list()
+        # Start auto-refresh loop
+        if _auto_refresh_id is None:
+            _auto_refresh_id = _root.after(AUTO_REFRESH_MS, _auto_refresh)
 
     _root.after(0, do_show)
