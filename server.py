@@ -177,7 +177,7 @@ def put_config():
 @app.route("/api/reminders", methods=["GET"])
 def get_reminders():
     data = _load_data()
-    reminders = sorted(data["reminders"], key=lambda r: (not r.get("pinned", False), -r.get("order", 0)))
+    reminders = sorted(data["reminders"], key=lambda r: -r.get("order", 0))
     return jsonify(reminders)
 
 
@@ -272,7 +272,7 @@ def reorder_reminders():
             if r["id"] in order_map:
                 r["order"] = order_map[r["id"]]
         _save_data(data)
-    reminders = sorted(data["reminders"], key=lambda r: (not r.get("pinned", False), -r.get("order", 0)))
+    reminders = sorted(data["reminders"], key=lambda r: -r.get("order", 0))
     return jsonify(reminders)
 
 

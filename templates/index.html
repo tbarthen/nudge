@@ -261,11 +261,6 @@ header .subtitle {
 
 .reminder-item:hover { background: var(--surface); }
 
-.reminder-item .pin-badge {
-  font-size: 0.8rem;
-  flex-shrink: 0;
-}
-
 .reminder-item .text {
   flex: 1;
   font-size: 1rem;
@@ -955,7 +950,7 @@ async function loadReminders() {
   try {
     reminders = await idbGetAll('reminders');
     reminders = reminders.filter(r => isSafeId(r.id));
-    reminders.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (b.order || 0) - (a.order || 0));
+    reminders.sort((a, b) => (b.order || 0) - (a.order || 0));
   } catch (_) {
     reminders = [];
   }
@@ -978,13 +973,12 @@ async function loadReminders() {
         <div class="select-check">&#10003;</div>
         <span class="drag-handle" title="Drag to reorder">&#9776;</span>
         <span class="flag-icon" title="Flagged for deletion on another device">&#9888;</span>
-        ${r.pinned ? '<span class="pin-badge" title="Pinned">&#128204;</span>' : ''}
         <span class="text">${escapeHtml(r.text)}</span>
         <input class="edit-input" type="text" value="${escapeAttr(r.text)}">
         <div class="actions">
           <button class="btn-icon btn-save" style="display:none" onclick="saveEdit('${safeId}', this)" title="Save">&#10003;</button>
           <button class="btn-icon btn-complete" onclick="completeReminder('${safeId}')" title="Complete">&#10003;</button>
-          <button class="btn-icon btn-menu" onclick="showMenu(event, '${safeId}', ${!!r.pinned}, ${idx}, ${reminders.length})" title="More">&#8942;</button>
+          <button class="btn-icon btn-menu" onclick="showMenu(event, '${safeId}', ${idx}, ${reminders.length})" title="More">&#8942;</button>
         </div>
       </div>
     </div>`;
@@ -1016,7 +1010,6 @@ async function addReminder(e) {
     text: text.slice(0, 500),
     created_at: new Date().toISOString(),
     completed_at: null,
-    pinned: false,
     order: maxOrder + 1,
   };
   await idbPut('reminders', reminder);
@@ -1077,31 +1070,18 @@ async function saveEdit(id, btn) {
   loadReminders();
 }
 
-async function togglePin(id, currentlyPinned) {
-  const item = await idbGet('reminders', id);
-  if (item) {
-    item.pinned = !currentlyPinned;
-    item.updated_at = new Date().toISOString();
-    await idbPut('reminders', item);
-  }
-  hideMenu();
-  loadReminders();
-  apiQuiet(`/api/reminders/${id}`, 'PUT', { pinned: !currentlyPinned });
-}
-
 // -- Context menu --
 function copyReminder(id) {
   const el = document.querySelector(`.reminder-item[data-id="${id}"] .text`);
   if (el) navigator.clipboard.writeText(el.textContent);
   hideMenu();
 }
-function showMenu(e, id, pinned, idx, total) {
+function showMenu(e, id, idx, total) {
   e.stopPropagation();
   const menu = document.getElementById('contextMenu');
   let html = `
     <button onclick="copyReminder('${id}')">Copy</button>
-    <button onclick="startEdit('${id}')">Edit</button>
-    <button onclick="togglePin('${id}', ${pinned})">${pinned ? 'Unpin' : 'Pin to top'}</button>`;
+    <button onclick="startEdit('${id}')">Edit</button>`;
   html += `<button onclick="deleteReminder('${id}'); hideMenu()">Delete</button>`;
   html += `<button onclick="hideMenu(); enterSelectMode('${id}')">Select</button>`;
   menu.innerHTML = html;
@@ -1488,7 +1468,6 @@ async function undoAction() {
       text: undoData.text,
       created_at: undoData.reminder.created_at || new Date().toISOString(),
       completed_at: null,
-      pinned: undoData.reminder.pinned || false,
       order: undoData.reminder.order || 0,
     };
     await idbPut('reminders', restored);
@@ -1549,7 +1528,7 @@ function initSwipe() {
         // Swipe right — complete
         item.classList.add('dismissing');
         item.style.transform = `translateX(${window.innerWidth}px)`;
-        const reminderData = { id, text, pinned: !!item.querySelector('.pin-badge') };
+        const reminderData = { id, text };
         setTimeout(async () => {
           const idbItem = await idbGet('reminders', id);
           if (idbItem) {
@@ -1566,7 +1545,7 @@ function initSwipe() {
         // Swipe left — delete
         item.classList.add('dismissing');
         item.style.transform = `translateX(-${window.innerWidth}px)`;
-        const reminderData = { id, text, pinned: !!item.querySelector('.pin-badge') };
+        const reminderData = { id, text };
         setTimeout(async () => {
           await idbDelete('reminders', id);
           showUndo('delete', text, reminderData);
