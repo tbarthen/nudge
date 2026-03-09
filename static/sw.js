@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nudge-v19';
+const CACHE_NAME = 'nudge-v20';
 const ASSETS = [
   '/',
   '/static/manifest.json',
@@ -20,6 +20,20 @@ self.addEventListener('activate', e => {
     )
   );
   self.clients.claim();
+});
+
+// Push — show notification from server
+self.addEventListener('push', e => {
+  let data = { title: 'Nudge — DO IT!!!', body: 'You have reminders waiting.', tag: 'nudge-reminder' };
+  try { data = e.data.json(); } catch (_) {}
+  e.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: '/static/icon-192.png',
+      tag: data.tag || 'nudge-reminder',
+      renotify: true,
+    })
+  );
 });
 
 // Notification click — focus or open the app

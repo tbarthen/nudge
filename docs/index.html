@@ -1199,7 +1199,6 @@ async function updateConfig() {
   const interval = parseInt(document.getElementById('intervalSelect').value);
   if (isNaN(interval) || interval < 1) return;
   localStorage.setItem('nudge-interval-minutes', interval);
-  restartNudgeTimer();
   apiQuiet('/api/config', 'PUT', { popup_interval_minutes: interval });
 }
 
@@ -2043,47 +2042,56 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
-// -- Periodic nudge notifications --
-let _nudgeTimer = null;
+// -- Web Push subscription --
+async function subscribeToPush() {
+  if (!('PushManager' in window) || !('serviceWorker' in navigator)) return;
 
-function getNudgeIntervalMs() {
-  const mins = parseInt(localStorage.getItem('nudge-interval-minutes')) || 60;
-  return Math.max(1, mins) * 60 * 1000;
-}
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') return;
 
-async function fireNudge() {
-  // Only nudge if there are active reminders
+  const reg = await navigator.serviceWorker.ready;
+
+  // Get VAPID key from server
+  let vapidKey;
   try {
-    const reminders = await idbGetAll('reminders');
-    if (!reminders || reminders.length === 0) return;
-  } catch (_) { return; }
-
-  // Don't nudge if app is currently focused
-  if (document.visibilityState === 'visible') return;
-
-  const reg = await navigator.serviceWorker?.ready;
-  if (reg) {
-    reg.showNotification('Nudge — DO IT!!!', {
-      body: 'You have reminders waiting.',
-      icon: 'icon-192.png',
-      tag: 'nudge-reminder',
-      renotify: true,
-    });
+    const resp = await fetch('/api/push/vapid-key');
+    const data = await resp.json();
+    vapidKey = data.key;
+  } catch (_) {
+    vapidKey = localStorage.getItem('nudge-vapid-key');
   }
+  if (!vapidKey) return;
+  localStorage.setItem('nudge-vapid-key', vapidKey);
+
+  // Convert VAPID key to Uint8Array
+  const padding = '='.repeat((4 - vapidKey.length % 4) % 4);
+  const raw = atob(vapidKey.replace(/-/g, '+').replace(/_/g, '/') + padding);
+  const keyArray = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) keyArray[i] = raw.charCodeAt(i);
+
+  // Subscribe (or get existing subscription)
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) {
+    try {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: keyArray,
+      });
+    } catch (_) { return; }
+  }
+
+  // Send subscription to server
+  try {
+    await fetch('/api/push/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sub.toJSON()),
+    });
+  } catch (_) {}
 }
 
-function restartNudgeTimer() {
-  if (_nudgeTimer) clearInterval(_nudgeTimer);
-  _nudgeTimer = setInterval(fireNudge, getNudgeIntervalMs());
-}
-
-// Request notification permission (once, non-blocking)
-if ('Notification' in window && Notification.permission === 'default') {
-  // Delay the permission prompt so it doesn't fire on first load
-  setTimeout(() => Notification.requestPermission(), 3000);
-}
-
-restartNudgeTimer();
+// Subscribe after a short delay
+setTimeout(subscribeToPush, 3000);
 
 // -- IndexedDB layer for offline PWA --
 const IDB_NAME = 'nudge-db';
