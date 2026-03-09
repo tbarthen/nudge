@@ -817,7 +817,7 @@ body.select-mode .reminder-item[draggable] { draggable: false; }
 <div class="settings-overlay" id="settingsOverlay" onclick="closeSettingsOutside(event)">
   <div class="settings-panel">
     <h2>Settings</h2>
-    <div class="setting-row">
+    <div class="setting-row" id="settingPopupInterval">
       <label>Popup interval</label>
       <select id="intervalSelect" onchange="updateConfig()">
         <option value="1">1 min (test)</option>
@@ -1594,22 +1594,6 @@ function initSwipe() {
 }
 
 // -- Reorder --
-async function moveReminder(id, direction) {
-  const items = [...document.querySelectorAll('.reminder-item')];
-  const idx = items.findIndex(el => el.dataset.id === id);
-  if (idx < 0) return;
-  const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-  if (swapIdx < 0 || swapIdx >= items.length) return;
-  const orderA = parseInt(items[idx].dataset.order);
-  const orderB = parseInt(items[swapIdx].dataset.order);
-  const reorderData = [
-    { id: items[idx].dataset.id, order: orderB },
-    { id: items[swapIdx].dataset.id, order: orderA }
-  ];
-  await applyReorder(reorderData);
-  loadReminders();
-}
-
 async function applyReorder(reorderData) {
   for (const entry of reorderData) {
     const item = await idbGet('reminders', entry.id);
@@ -1959,6 +1943,9 @@ const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 function initSyncUI() {
   if (isMobile || isPWA) {
     document.getElementById('syncPhone').style.display = 'block';
+    // Popup interval is a desktop tray setting — hide on phone/PWA
+    const popupIntervalRow = document.getElementById('settingPopupInterval');
+    if (popupIntervalRow) popupIntervalRow.style.display = 'none';
     loadSyncState();
   } else {
     document.getElementById('syncDesktop').style.display = 'block';
