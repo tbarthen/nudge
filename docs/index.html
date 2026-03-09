@@ -235,6 +235,13 @@ header .subtitle {
 
 .drag-handle:active { cursor: grabbing; }
 
+.reminder-item.touch-holding {
+  transform: scale(1.03);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  z-index: 10;
+  transition: transform 0.15s ease-out, box-shadow 0.15s ease-out;
+}
+
 .reminder-item.dragging {
   height: 0 !important;
   min-height: 0 !important;
@@ -1512,7 +1519,9 @@ function initSwipe() {
     const bgDelete = wrapper.querySelector('.swipe-bg-delete');
     let startX = 0, startY = 0, currentX = 0, swiping = false;
     let directionLocked = false, isHorizontal = false;
+    let longPressTimer = null, longPressed = false;
     const LOCK_THRESHOLD = 10;
+    const LONG_PRESS_MS = 400;
 
     item.addEventListener('touchstart', e => {
       if (selectMode) return;
@@ -1522,13 +1531,32 @@ function initSwipe() {
       swiping = true;
       directionLocked = false;
       isHorizontal = false;
+      longPressed = false;
       item.classList.remove('snapping', 'dismissing');
+      // Start long-press timer
+      longPressTimer = setTimeout(() => {
+        longPressed = true;
+        swiping = false;
+        item.classList.add('touch-holding');
+        if (navigator.vibrate) navigator.vibrate(30);
+        // Dispatch custom event so initDragAndDrop can pick it up
+        item.dispatchEvent(new CustomEvent('longpress', {
+          detail: { clientX: startX, clientY: startY }
+        }));
+      }, LONG_PRESS_MS);
     }, { passive: true });
 
     item.addEventListener('touchmove', e => {
-      if (!swiping || selectMode) return;
+      if (longPressed || selectMode) return;
+      if (!swiping) return;
       const dx = e.touches[0].clientX - startX;
       const dy = e.touches[0].clientY - startY;
+
+      // Any movement cancels long-press
+      if (longPressTimer && (Math.abs(dx) > LOCK_THRESHOLD || Math.abs(dy) > LOCK_THRESHOLD)) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
 
       // Lock direction after initial movement exceeds threshold
       if (!directionLocked) {
@@ -1556,6 +1584,9 @@ function initSwipe() {
     }, { passive: true });
 
     item.addEventListener('touchend', async () => {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+      if (longPressed) { longPressed = false; return; }
       if (!swiping) return;
       swiping = false;
       item.classList.remove('swiping');
@@ -1605,6 +1636,9 @@ function initSwipe() {
     });
 
     item.addEventListener('touchcancel', () => {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+      longPressed = false;
       swiping = false;
       item.classList.remove('swiping');
       if (isHorizontal) {
@@ -1783,41 +1817,31 @@ function initDragAndDrop() {
       loadReminders();
     });
 
-    // Touch drag support (long-press to initiate)
-    const handle = item.querySelector('.drag-handle');
-    let touchTimeout = null;
+    // Touch drag support (long-press anywhere on item to initiate)
     let touchDragging = false;
     let touchClone = null;
-    let touchStartY = 0;
 
-    handle.addEventListener('touchstart', e => {
-      touchStartY = e.touches[0].clientY;
-      touchTimeout = setTimeout(() => {
-        touchDragging = true;
-        dragItem = item;
-        // Clone before collapsing so dimensions are correct
-        touchClone = item.cloneNode(true);
-        const itemRect = item.getBoundingClientRect();
-        touchClone.style.cssText = `position:fixed;left:${itemRect.left}px;top:${e.touches[0].clientY - 20}px;width:${itemRect.width}px;opacity:0.8;z-index:9999;pointer-events:none;`;
-        document.body.appendChild(touchClone);
-        // Collapse original item
-        item.classList.add('dragging');
-        const wrapper = item.closest('.swipe-wrapper');
-        if (wrapper) wrapper.classList.add('dragging-source');
-        document.body.classList.add('dragging-active');
-        // Capture rects after collapse takes effect
-        requestAnimationFrame(() => _captureRects());
-        if (navigator.vibrate) navigator.vibrate(30);
-      }, 400);
-    }, { passive: true });
+    item.addEventListener('longpress', e => {
+      touchDragging = true;
+      dragItem = item;
+      // Clone before collapsing so dimensions are correct
+      touchClone = item.cloneNode(true);
+      touchClone.classList.remove('touch-holding');
+      const itemRect = item.getBoundingClientRect();
+      touchClone.style.cssText = `position:fixed;left:${itemRect.left}px;top:${e.detail.clientY - 20}px;width:${itemRect.width}px;opacity:0.85;z-index:9999;pointer-events:none;box-shadow:0 8px 30px rgba(0,0,0,0.4);border-radius:10px;`;
+      document.body.appendChild(touchClone);
+      // Collapse original item
+      item.classList.remove('touch-holding');
+      item.classList.add('dragging');
+      const wrapper = item.closest('.swipe-wrapper');
+      if (wrapper) wrapper.classList.add('dragging-source');
+      document.body.classList.add('dragging-active');
+      // Capture rects after collapse takes effect
+      requestAnimationFrame(() => _captureRects());
+    });
 
-    handle.addEventListener('touchmove', e => {
-      if (!touchDragging) {
-        if (Math.abs(e.touches[0].clientY - touchStartY) > 10) {
-          clearTimeout(touchTimeout);
-        }
-        return;
-      }
+    item.addEventListener('touchmove', e => {
+      if (!touchDragging) return;
       e.preventDefault();
       const y = e.touches[0].clientY;
       if (touchClone) touchClone.style.top = (y - 20) + 'px';
@@ -1827,15 +1851,14 @@ function initDragAndDrop() {
       if (target) _setDropTarget(target, side);
     }, { passive: false });
 
-    handle.addEventListener('touchend', async () => {
-      clearTimeout(touchTimeout);
+    item.addEventListener('touchend', async () => {
+      if (!touchDragging) return;
+      touchDragging = false;
       if (touchClone) {
         document.body.removeChild(touchClone);
         touchClone = null;
       }
-      if (!touchDragging) return;
-      touchDragging = false;
-      item.classList.remove('dragging');
+      item.classList.remove('dragging', 'touch-holding');
       const wrapperEnd = item.closest('.swipe-wrapper');
       if (wrapperEnd) wrapperEnd.classList.remove('dragging-source');
       document.body.classList.remove('dragging-active');
@@ -1862,10 +1885,10 @@ function initDragAndDrop() {
       loadReminders();
     });
 
-    handle.addEventListener('touchcancel', () => {
-      clearTimeout(touchTimeout);
+    item.addEventListener('touchcancel', () => {
+      if (!touchDragging) return;
       touchDragging = false;
-      item.classList.remove('dragging');
+      item.classList.remove('dragging', 'touch-holding');
       const wrapperCancel = item.closest('.swipe-wrapper');
       if (wrapperCancel) wrapperCancel.classList.remove('dragging-source');
       document.body.classList.remove('dragging-active');
