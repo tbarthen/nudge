@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nudge-v21';
+const CACHE_NAME = 'nudge-v22';
 const ASSETS = [
   './',
   'manifest.json',
@@ -20,33 +20,6 @@ self.addEventListener('activate', e => {
     )
   );
   self.clients.claim();
-});
-
-// Push — show notification from server
-self.addEventListener('push', e => {
-  let data = { title: 'Nudge — DO IT!!!', body: 'You have reminders waiting.', tag: 'nudge-reminder' };
-  try { data = e.data.json(); } catch (_) {}
-  e.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      icon: 'icon-192.png',
-      tag: data.tag || 'nudge-reminder',
-      renotify: true,
-    })
-  );
-});
-
-// Notification click — focus or open the app
-self.addEventListener('notificationclick', e => {
-  e.notification.close();
-  e.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
-      if (clients.length > 0) {
-        return clients[0].focus();
-      }
-      return self.clients.openWindow('./');
-    })
-  );
 });
 
 // Fetch — network-first with cache fallback

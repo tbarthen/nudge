@@ -1191,7 +1191,6 @@ async function loadConfig() {
     localStorage.setItem('nudge-retention-days', config.completed_retention_days || 60);
   } catch (e) {
     // Standalone mode — use localStorage
-    document.getElementById('intervalSelect').value = localStorage.getItem('nudge-interval-minutes') || 60;
     document.getElementById('retentionDays').value = localStorage.getItem('nudge-retention-days') || 60;
   }
 }
@@ -2040,57 +2039,6 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/static/sw.js').catch(() => {});
 }
 
-// -- Web Push subscription --
-async function subscribeToPush() {
-  if (!('PushManager' in window) || !('serviceWorker' in navigator)) return;
-
-  const perm = await Notification.requestPermission();
-  if (perm !== 'granted') return;
-
-  const reg = await navigator.serviceWorker.ready;
-
-  // Get VAPID key from server
-  let vapidKey;
-  try {
-    const resp = await fetch('/api/push/vapid-key');
-    const data = await resp.json();
-    vapidKey = data.key;
-  } catch (_) {
-    vapidKey = localStorage.getItem('nudge-vapid-key');
-  }
-  if (!vapidKey) return;
-  localStorage.setItem('nudge-vapid-key', vapidKey);
-
-  // Convert VAPID key to Uint8Array
-  const padding = '='.repeat((4 - vapidKey.length % 4) % 4);
-  const raw = atob(vapidKey.replace(/-/g, '+').replace(/_/g, '/') + padding);
-  const keyArray = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) keyArray[i] = raw.charCodeAt(i);
-
-  // Subscribe (or get existing subscription)
-  let sub = await reg.pushManager.getSubscription();
-  if (!sub) {
-    try {
-      sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: keyArray,
-      });
-    } catch (_) { return; }
-  }
-
-  // Send subscription to server
-  try {
-    await fetch('/api/push/subscribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(sub.toJSON()),
-    });
-  } catch (_) {}
-}
-
-// Subscribe after a short delay
-setTimeout(subscribeToPush, 3000);
-
 // -- IndexedDB layer for offline PWA --
 const IDB_NAME = 'nudge-db';
 const IDB_VERSION = 1;
@@ -2185,12 +2133,9 @@ const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 function initSyncUI() {
   if (isMobile || isPWA) {
     document.getElementById('syncPhone').style.display = 'block';
-    // Relabel for PWA context
+    // Popup interval is a desktop tray setting — hide on phone/PWA
     const popupIntervalRow = document.getElementById('settingPopupInterval');
-    if (popupIntervalRow) {
-      const lbl = popupIntervalRow.querySelector('label');
-      if (lbl) lbl.textContent = 'Notification interval';
-    }
+    if (popupIntervalRow) popupIntervalRow.style.display = 'none';
     loadSyncState();
   } else {
     document.getElementById('syncDesktop').style.display = 'block';

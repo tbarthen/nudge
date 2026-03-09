@@ -4,9 +4,5 @@ __pycache__/
 *.ico
 reminders.json
 .paired_devices.json
-.vapid_private.pem
-.vapid_public.pem
-.vapid_keys.json
-.push_subscriptions.json
 .claude/
 *.tmp
