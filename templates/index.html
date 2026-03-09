@@ -1086,9 +1086,14 @@ function showMenu(e, id, idx, total) {
   html += `<button onclick="hideMenu(); enterSelectMode('${id}')">Select</button>`;
   menu.innerHTML = html;
   const rect = e.target.getBoundingClientRect();
-  menu.style.top = rect.bottom + 4 + 'px';
-  menu.style.left = Math.min(rect.left, window.innerWidth - 160) + 'px';
   menu.classList.add('visible');
+  // Clamp to viewport so menu doesn't overflow off-screen
+  const menuH = menu.offsetHeight;
+  const top = rect.bottom + 4 + menuH > window.innerHeight
+    ? rect.top - menuH - 4
+    : rect.bottom + 4;
+  menu.style.top = Math.max(4, top) + 'px';
+  menu.style.left = Math.min(rect.left, window.innerWidth - 160) + 'px';
 }
 
 function hideMenu() {
@@ -1586,7 +1591,11 @@ async function applyReorder(reorderData) {
   apiQuiet('/api/reminders/reorder', 'POST', safe);
 }
 
+let _dragAbort = null;
 function initDragAndDrop() {
+  if (_dragAbort) _dragAbort.abort();
+  _dragAbort = new AbortController();
+  const sig = { signal: _dragAbort.signal };
   const list = document.getElementById('reminderList');
   const items = list.querySelectorAll('.reminder-item');
   let dragItem = null;
@@ -1603,13 +1612,13 @@ function initDragAndDrop() {
       const lastItem = items[items.length - 1];
       if (lastItem && lastItem !== dragItem) lastItem.classList.add('drag-over-bottom');
     }
-  });
+  }, sig);
 
   list.addEventListener('dragleave', e => {
     if (!list.contains(e.relatedTarget)) {
       items.forEach(i => { i.classList.remove('drag-over'); i.classList.remove('drag-over-bottom'); });
     }
-  });
+  }, sig);
 
   list.addEventListener('drop', async e => {
     e.preventDefault();
@@ -1630,7 +1639,7 @@ function initDragAndDrop() {
     }));
     await applyReorder(reorder);
     loadReminders();
-  });
+  }, sig);
 
   items.forEach(item => {
     // Desktop drag events

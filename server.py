@@ -42,20 +42,36 @@ def _is_safe_id(val):
     return isinstance(val, str) and 1 <= len(val) <= 100 and _SAFE_ID_RE.match(val)
 
 
+def _clamp_timestamp(ts):
+    """Validate and clamp an ISO timestamp string. Reject far-future values."""
+    if not isinstance(ts, str) or len(ts) > 30:
+        return None
+    try:
+        dt = datetime.fromisoformat(ts)
+        # Clamp to at most 1 day in the future (clock skew tolerance)
+        max_dt = datetime.now() + timedelta(days=1)
+        if dt > max_dt:
+            return max_dt.isoformat()
+        return ts
+    except (ValueError, TypeError):
+        return None
+
+
 def _sanitize_item(item, allow_completed=False):
     """Strip an item down to only known safe fields. Prevents payload bloat and injection."""
     safe = {
         "id": str(item.get("id", "")),
         "text": str(item.get("text", "")).strip()[:500],
-        "created_at": str(item.get("created_at", ""))[:30],
+        "created_at": _clamp_timestamp(item.get("created_at")) or datetime.now().isoformat(),
         "completed_at": None,
         "pinned": bool(item.get("pinned", False)),
         "order": int(item["order"]) if isinstance(item.get("order"), (int, float)) else 0,
     }
     if allow_completed and item.get("completed_at"):
-        safe["completed_at"] = str(item["completed_at"])[:30]
-    if isinstance(item.get("updated_at"), str):
-        safe["updated_at"] = item["updated_at"][:30]
+        safe["completed_at"] = _clamp_timestamp(item["completed_at"])
+    ts = _clamp_timestamp(item.get("updated_at"))
+    if ts:
+        safe["updated_at"] = ts
     if isinstance(item.get("deletion_flagged"), bool):
         safe["deletion_flagged"] = item["deletion_flagged"]
     return safe
@@ -223,6 +239,8 @@ def add_reminder():
 
 @app.route("/api/reminders/<reminder_id>", methods=["PUT"])
 def edit_reminder(reminder_id):
+    if not _is_safe_id(reminder_id):
+        return jsonify({"error": "invalid id"}), 400
     body = request.get_json(silent=True)
     if not body:
         return jsonify({"error": "invalid JSON body"}), 400
@@ -278,6 +296,8 @@ def reorder_reminders():
 
 @app.route("/api/reminders/<reminder_id>", methods=["DELETE"])
 def delete_reminder(reminder_id):
+    if not _is_safe_id(reminder_id):
+        return jsonify({"error": "invalid id"}), 400
     with _data_lock:
         data = _load_data()
         original_len = len(data["reminders"])
@@ -336,6 +356,8 @@ def batch_delete():
 
 @app.route("/api/reminders/<reminder_id>/complete", methods=["PATCH"])
 def complete_reminder(reminder_id):
+    if not _is_safe_id(reminder_id):
+        return jsonify({"error": "invalid id"}), 400
     with _data_lock:
         data = _load_data()
         found = None
@@ -357,6 +379,8 @@ def complete_reminder(reminder_id):
 
 @app.route("/api/completed/<completed_id>/uncomplete", methods=["PATCH"])
 def uncomplete_reminder(completed_id):
+    if not _is_safe_id(completed_id):
+        return jsonify({"error": "invalid id"}), 400
     with _data_lock:
         data = _load_data()
         found = None
@@ -442,13 +466,16 @@ def generate_pairing_code():
         }
         expires = expires_dt.isoformat()
     # Include local IP so phone knows where to connect
+    local_ip = "127.0.0.1"
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        local_ip = s.getsockname()[0]
-        s.close()
+        try:
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+        finally:
+            s.close()
     except Exception:
-        local_ip = "127.0.0.1"
+        pass
     return jsonify({"code": code, "expires": expires, "ip": local_ip})
 
 
@@ -505,7 +532,9 @@ def validate_pairing_code():
 def pairing_status():
     """Check if a device is paired (by device_id query param)."""
     device_id = request.args.get("device_id", "")
-    return jsonify({"paired": device_id in _paired_devices})
+    with _pairing_lock:
+        paired = device_id in _paired_devices
+    return jsonify({"paired": paired})
 
 
 @app.route("/api/pair/unpair", methods=["POST"])

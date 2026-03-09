@@ -641,7 +641,7 @@ def _populate_list(reminders, is_cache=False):
         tk.Button(row, text="\u2713", font=btn_font, bg="#2ecc71", fg="white",
                   bd=0, width=3, cursor="hand2", command=make_complete(rid, row)).pack(side="right", padx=(4, 0))
 
-        def make_menu(r_id, r_text, r_idx, r_total, widget, r_row):
+        def make_menu(r_id, r_text, widget, r_row):
             def show_menu():
                 menu = tk.Menu(root, tearoff=0, bg=CARD_BG, fg=FG,
                                activebackground=ACCENT, activeforeground="white")
@@ -657,31 +657,12 @@ def _populate_list(reminders, is_cache=False):
                         threading.Thread(target=bg, daemon=True).start()
                     _animate_remove(r_row, after_anim)
 
-                def do_move(direction):
-                    swap_idx = r_idx - 1 if direction == "up" else r_idx + 1
-                    if swap_idx < 0 or swap_idx >= r_total:
-                        return
-                    other = reminders[swap_idx]
-                    my_order = reminders[r_idx].get("order", 0)
-                    other_order = other.get("order", 0)
-                    def bg():
-                        _api_post(port, "/api/reminders/reorder", [
-                            {"id": r_id, "order": other_order},
-                            {"id": other["id"], "order": my_order},
-                        ])
-                        root.after(0, _rebuild_list)
-                    threading.Thread(target=bg, daemon=True).start()
-
                 def do_copy():
                     root.clipboard_clear()
                     root.clipboard_append(r_text)
 
                 menu.add_command(label="Copy", command=do_copy)
                 menu.add_command(label="Edit", command=do_edit)
-                if r_idx > 0:
-                    menu.add_command(label="\u25B2 Move up", command=lambda: do_move("up"))
-                if r_idx < r_total - 1:
-                    menu.add_command(label="\u25BC Move down", command=lambda: do_move("down"))
                 menu.add_command(label="Delete", command=do_delete)
 
                 try:
@@ -692,7 +673,7 @@ def _populate_list(reminders, is_cache=False):
 
         dots_btn = tk.Button(row, text="\u22EE", font=btn_font, bg=BTN_BG, fg=FG,
                              bd=0, width=2, cursor="hand2")
-        dots_btn.configure(command=make_menu(rid, reminder["text"], idx, total, dots_btn, row))
+        dots_btn.configure(command=make_menu(rid, reminder["text"], dots_btn, row))
         dots_btn.pack(side="right", padx=(4, 0))
 
 
