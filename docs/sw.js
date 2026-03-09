@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nudge-v18';
+const CACHE_NAME = 'nudge-v19';
 const ASSETS = [
   './',
   'manifest.json',
@@ -20,6 +20,19 @@ self.addEventListener('activate', e => {
     )
   );
   self.clients.claim();
+});
+
+// Notification click — focus or open the app
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
+      if (clients.length > 0) {
+        return clients[0].focus();
+      }
+      return self.clients.openWindow('./');
+    })
+  );
 });
 
 // Fetch — network-first with cache fallback
