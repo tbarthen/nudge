@@ -149,8 +149,7 @@ def _show_undo(action, item_id, item_text):
     except tk.TclError:
         undo_frame.pack(side="bottom", fill="x")
 
-    # Auto-dismiss after 5 seconds
-    undo_frame._undo_timer = root.after(5000, _dismiss_undo)
+    # Stays visible until user clicks Undo or completes/deletes another item
 
 
 def _dismiss_undo():
