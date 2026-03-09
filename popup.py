@@ -106,6 +106,62 @@ def _api_delete(port, path):
         return None
 
 
+def _show_undo(action, item_id, item_text):
+    """Show an undo bar at the bottom of the popup."""
+    root = _root
+    if not root:
+        return
+    undo_frame = root._undo_frame
+
+    # Cancel any previous undo timer
+    if undo_frame._undo_timer:
+        root.after_cancel(undo_frame._undo_timer)
+        undo_frame._undo_timer = None
+
+    # Clear previous contents
+    for w in undo_frame.winfo_children():
+        w.destroy()
+
+    label_text = "Completed" if action == "complete" else "Deleted"
+    display = item_text if len(item_text) <= 30 else item_text[:27] + "..."
+
+    tk.Label(undo_frame, text=f"{label_text}: {display}", font=("Segoe UI", 9),
+             bg="#2a2a4a", fg="#ccc", anchor="w").pack(side="left", padx=(10, 4), pady=6)
+
+    def do_undo():
+        _dismiss_undo()
+        port = _port
+        def bg():
+            if action == "complete":
+                _api_call(port, f"/api/completed/{item_id}/uncomplete", "PATCH")
+            elif action == "delete":
+                # Re-create the reminder via POST
+                _api_post(port, "/api/reminders", {"text": item_text, "id": item_id})
+            root.after(0, _rebuild_list)
+        threading.Thread(target=bg, daemon=True).start()
+
+    tk.Button(undo_frame, text="Undo", font=("Segoe UI", 9, "bold"),
+              bg=ACCENT, fg="white", bd=0, padx=10, cursor="hand2",
+              command=do_undo).pack(side="right", padx=(4, 10), pady=6)
+
+    undo_frame.pack(side="bottom", fill="x")
+
+    # Auto-dismiss after 5 seconds
+    undo_frame._undo_timer = root.after(5000, _dismiss_undo)
+
+
+def _dismiss_undo():
+    """Hide the undo bar."""
+    root = _root
+    if not root:
+        return
+    undo_frame = root._undo_frame
+    if undo_frame._undo_timer:
+        root.after_cancel(undo_frame._undo_timer)
+        undo_frame._undo_timer = None
+    undo_frame.pack_forget()
+
+
 def _init_window():
     """Create the persistent Tk window (hidden). Called once on a dedicated thread."""
     global _root, _initialized, popup_visible
@@ -234,6 +290,12 @@ def _init_window():
 
     # Don't pack scrollbar by default — it will show dynamically when needed
     canvas.pack(side="left", fill="both", expand=True, padx=(4, 0), pady=4)
+
+    # Undo bar (hidden by default, shown after complete/delete)
+    undo_frame = tk.Frame(root, bg="#2a2a4a", height=36)
+    undo_frame._undo_timer = None
+    root._undo_frame = undo_frame
+    # Not packed — shown dynamically
 
     def on_mousewheel(e):
         if content_frame.winfo_reqheight() > canvas.winfo_height():
@@ -627,19 +689,18 @@ def _populate_list(reminders, is_cache=False):
 
         rid = reminder["id"]
 
-        def make_complete(r_id, r_row):
+        def make_complete(r_id, r_text, r_row):
             def do_complete():
-                # Animate immediately, then fire API + rebuild
                 def after_anim():
                     def bg():
                         _api_call(port, f"/api/reminders/{r_id}/complete", "PATCH")
-                        root.after(0, _rebuild_list)
+                        root.after(0, lambda: [_rebuild_list(), _show_undo("complete", r_id, r_text)])
                     threading.Thread(target=bg, daemon=True).start()
                 _animate_remove(r_row, after_anim)
             return do_complete
 
         tk.Button(row, text="\u2713", font=btn_font, bg="#2ecc71", fg="white",
-                  bd=0, width=3, cursor="hand2", command=make_complete(rid, row)).pack(side="right", padx=(4, 0))
+                  bd=0, width=3, cursor="hand2", command=make_complete(rid, reminder["text"], row)).pack(side="right", padx=(4, 0))
 
         def make_menu(r_id, r_text, widget, r_row):
             def show_menu():
@@ -653,7 +714,7 @@ def _populate_list(reminders, is_cache=False):
                     def after_anim():
                         def bg():
                             _api_delete(port, f"/api/reminders/{r_id}")
-                            root.after(0, _rebuild_list)
+                            root.after(0, lambda: [_rebuild_list(), _show_undo("delete", r_id, r_text)])
                         threading.Thread(target=bg, daemon=True).start()
                     _animate_remove(r_row, after_anim)
 
