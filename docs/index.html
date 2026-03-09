@@ -1510,20 +1510,38 @@ function initSwipe() {
     const item = wrapper.querySelector('.reminder-item');
     const bgComplete = wrapper.querySelector('.swipe-bg-complete');
     const bgDelete = wrapper.querySelector('.swipe-bg-delete');
-    let startX = 0, currentX = 0, swiping = false;
+    let startX = 0, startY = 0, currentX = 0, swiping = false;
+    let directionLocked = false, isHorizontal = false;
+    const LOCK_THRESHOLD = 10;
 
     item.addEventListener('touchstart', e => {
       if (selectMode) return;
       startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
       currentX = 0;
       swiping = true;
+      directionLocked = false;
+      isHorizontal = false;
       item.classList.remove('snapping', 'dismissing');
-      item.classList.add('swiping');
     }, { passive: true });
 
     item.addEventListener('touchmove', e => {
       if (!swiping || selectMode) return;
-      currentX = e.touches[0].clientX - startX;
+      const dx = e.touches[0].clientX - startX;
+      const dy = e.touches[0].clientY - startY;
+
+      // Lock direction after initial movement exceeds threshold
+      if (!directionLocked) {
+        if (Math.abs(dx) < LOCK_THRESHOLD && Math.abs(dy) < LOCK_THRESHOLD) return;
+        directionLocked = true;
+        isHorizontal = Math.abs(dx) > Math.abs(dy);
+        if (isHorizontal) item.classList.add('swiping');
+      }
+
+      // If vertical movement won, don't swipe
+      if (!isHorizontal) return;
+
+      currentX = dx;
 
       // Show correct background
       if (currentX > 0) {
@@ -1541,6 +1559,7 @@ function initSwipe() {
       if (!swiping) return;
       swiping = false;
       item.classList.remove('swiping');
+      if (!isHorizontal) return;
 
       const id = wrapper.dataset.id;
       const textEl = item.querySelector('.text');
@@ -1588,8 +1607,10 @@ function initSwipe() {
     item.addEventListener('touchcancel', () => {
       swiping = false;
       item.classList.remove('swiping');
-      item.classList.add('snapping');
-      item.style.transform = 'translateX(0)';
+      if (isHorizontal) {
+        item.classList.add('snapping');
+        item.style.transform = 'translateX(0)';
+      }
     });
   });
 }
