@@ -129,14 +129,20 @@ def _show_undo(action, item_id, item_text):
              bg="#2a2a4a", fg="#ccc", anchor="w").pack(side="left", padx=(10, 4), pady=6)
 
     def do_undo():
+        if undo_frame._undo_in_progress:
+            return
+        undo_frame._undo_in_progress = True
         _dismiss_undo()
         port = _port
         def bg():
-            if action == "complete":
-                _api_call(port, f"/api/completed/{item_id}/uncomplete", "PATCH")
-            elif action == "delete":
-                # Re-create the reminder via POST
-                _api_post(port, "/api/reminders", {"text": item_text, "id": item_id})
+            try:
+                if action == "complete":
+                    _api_call(port, f"/api/completed/{item_id}/uncomplete", "PATCH")
+                elif action == "delete":
+                    # Re-create the reminder via POST
+                    _api_post(port, "/api/reminders", {"text": item_text, "id": item_id})
+            finally:
+                undo_frame._undo_in_progress = False
             root.after(0, _rebuild_list)
         threading.Thread(target=bg, daemon=True).start()
 
@@ -296,6 +302,7 @@ def _init_window():
     # Undo bar (hidden by default, shown after complete/delete)
     undo_frame = tk.Frame(root, bg="#2a2a4a", height=36)
     undo_frame._undo_timer = None
+    undo_frame._undo_in_progress = False
     root._undo_frame = undo_frame
     # Not packed — shown dynamically
 
@@ -488,13 +495,18 @@ def _drag_motion(event):
         if root._drag_indicator is None:
             root._drag_indicator = tk.Frame(root, bg=ACCENT, height=3)
         # Position the indicator
-        if target_idx < len(rows):
-            ref_row = rows[target_idx]
-            ind_y = ref_row.winfo_rooty() - root.winfo_rooty() - 2
-        else:
-            ref_row = rows[-1]
-            ind_y = ref_row.winfo_rooty() + ref_row.winfo_height() - root.winfo_rooty() + 1
-        root._drag_indicator.place(x=8, y=ind_y, width=WIN_W - 32, height=3)
+        try:
+            if target_idx < len(rows):
+                ref_row = rows[target_idx]
+                ind_y = ref_row.winfo_rooty() - root.winfo_rooty() - 2
+            elif rows:
+                ref_row = rows[-1]
+                ind_y = ref_row.winfo_rooty() + ref_row.winfo_height() - root.winfo_rooty() + 1
+            else:
+                ind_y = 0
+            root._drag_indicator.place(x=8, y=ind_y, width=WIN_W - 32, height=3)
+        except tk.TclError:
+            pass
     else:
         root._drag_target = None
 
@@ -535,6 +547,10 @@ def _drag_end(event):
         return
 
     reminders = root._drag_reminders
+    if drag_idx >= len(reminders):
+        root._drag_item = None
+        root._drag_target = None
+        return
     if drag_idx == target_idx or drag_idx + 1 == target_idx:
         root._drag_item = None
         root._drag_target = None
@@ -743,6 +759,8 @@ def _populate_list(reminders, is_cache=False):
 
 
 def _show_edit_dialog(parent, port, r_id, current_text):
+    if not parent:
+        return
     dialog = tk.Toplevel(parent)
     dialog.overrideredirect(True)
     dialog.attributes("-topmost", True)
@@ -764,7 +782,8 @@ def _show_edit_dialog(parent, port, r_id, current_text):
         if new_text and new_text != current_text:
             def bg():
                 _api_put(port, f"/api/reminders/{r_id}", {"text": new_text})
-                _root.after(0, _rebuild_list)
+                if _root:
+                    _root.after(0, _rebuild_list)
             threading.Thread(target=bg, daemon=True).start()
         dialog.destroy()
 

@@ -57,6 +57,13 @@ def _clamp_timestamp(ts):
         return None
 
 
+def _safe_int(val, default=0):
+    """Convert a value to int, rejecting NaN/Infinity."""
+    if isinstance(val, (int, float)) and val == val and val not in (float('inf'), float('-inf')):
+        return int(val)
+    return default
+
+
 def _sanitize_item(item, allow_completed=False):
     """Strip an item down to only known safe fields. Prevents payload bloat and injection."""
     safe = {
@@ -65,7 +72,7 @@ def _sanitize_item(item, allow_completed=False):
         "created_at": _clamp_timestamp(item.get("created_at")) or datetime.now().isoformat(),
         "completed_at": None,
         "pinned": bool(item.get("pinned", False)),
-        "order": int(item["order"]) if isinstance(item.get("order"), (int, float)) else 0,
+        "order": _safe_int(item.get("order"), 0),
     }
     if allow_completed and item.get("completed_at"):
         safe["completed_at"] = _clamp_timestamp(item["completed_at"])
@@ -230,7 +237,7 @@ def add_reminder():
             "created_at": client_created or datetime.now().isoformat(),
             "completed_at": None,
             "pinned": pinned,
-            "order": body.get("order", max_order + 1) if isinstance(body.get("order"), (int, float)) else max_order + 1,
+            "order": _safe_int(body.get("order"), max_order + 1),
         }
         data["reminders"].append(reminder)
         _save_data(data)
@@ -257,7 +264,7 @@ def edit_reminder(reminder_id):
                 if "pinned" in body and isinstance(body["pinned"], bool):
                     r["pinned"] = body["pinned"]
                     changed = True
-                if "order" in body and isinstance(body["order"], (int, float)):
+                if "order" in body and isinstance(body["order"], (int, float)) and body["order"] == body["order"] and body["order"] not in (float('inf'), float('-inf')):
                     r["order"] = int(body["order"])
                     changed = True
                 if "deletion_flagged" in body and isinstance(body["deletion_flagged"], bool):
@@ -281,11 +288,12 @@ def reorder_reminders():
         data = _load_data()
         order_map = {}
         for item in body:
-            if isinstance(item, dict) and "id" in item and "order" in item and isinstance(item["order"], (int, float)):
+            if isinstance(item, dict) and "id" in item and "order" in item:
+                order_val = _safe_int(item.get("order"))
                 item_id = str(item["id"])
                 if not _is_safe_id(item_id):
                     continue
-                order_map[item_id] = int(item["order"])
+                order_map[item_id] = order_val
         for r in data["reminders"]:
             if r["id"] in order_map:
                 r["order"] = order_map[r["id"]]
@@ -316,7 +324,7 @@ def batch_complete():
         return jsonify({"error": "expected JSON array of IDs"}), 400
     if len(body) > MAX_REMINDERS:
         return jsonify({"error": "too many items"}), 400
-    ids = set(str(i) for i in body if isinstance(i, str))
+    ids = set(str(i) for i in body if isinstance(i, str) and _is_safe_id(str(i)))
     with _data_lock:
         data = _load_data()
         completed = []
@@ -343,7 +351,7 @@ def batch_delete():
         return jsonify({"error": "expected JSON array of IDs"}), 400
     if len(body) > MAX_REMINDERS:
         return jsonify({"error": "too many items"}), 400
-    ids = set(str(i) for i in body if isinstance(i, str))
+    ids = set(str(i) for i in body if isinstance(i, str) and _is_safe_id(str(i)))
     with _data_lock:
         data = _load_data()
         before = len(data["reminders"])
@@ -410,6 +418,21 @@ def get_completed():
             _save_data(data)
     completed = sorted(data["completed"], key=lambda c: c.get("completed_at", ""), reverse=True)
     return jsonify(completed)
+
+
+@app.route("/api/completed/<completed_id>", methods=["DELETE"])
+def delete_completed(completed_id):
+    if not _is_safe_id(completed_id):
+        return jsonify({"error": "invalid id"}), 400
+    with _data_lock:
+        data = _load_data()
+        original_len = len(data["completed"])
+        data["completed"] = [c for c in data["completed"] if c["id"] != completed_id]
+        if len(data["completed"]) == original_len:
+            return jsonify({"error": "not found"}), 404
+        _track_deletion(data, completed_id)
+        _save_data(data)
+    return jsonify({"ok": True})
 
 
 # --- Pairing API ---
@@ -532,6 +555,8 @@ def validate_pairing_code():
 def pairing_status():
     """Check if a device is paired (by device_id query param)."""
     device_id = request.args.get("device_id", "")
+    if not device_id or len(device_id) > 100:
+        return jsonify({"paired": False})
     with _pairing_lock:
         paired = device_id in _paired_devices
     return jsonify({"paired": paired})
@@ -542,6 +567,8 @@ def unpair_device():
     """Remove a device from the paired set."""
     body = request.get_json(silent=True)
     device_id = str(body.get("device_id", "")) if body else ""
+    if not device_id or len(device_id) > 100:
+        return jsonify({"error": "invalid device_id"}), 400
     with _pairing_lock:
         _paired_devices.discard(device_id)
         _save_paired_devices(_paired_devices)
