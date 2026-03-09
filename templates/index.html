@@ -555,6 +555,11 @@ header .subtitle {
   border-radius: 10px;
 }
 
+body.dragging-active {
+  overflow: hidden;
+  touch-action: none;
+}
+
 body.dragging-active .swipe-wrapper {
   overflow: visible;
 }
@@ -1693,15 +1698,17 @@ function initDragAndDrop() {
   }
 
   function _captureRects() {
+    const scrollY = window.scrollY || window.pageYOffset;
     _originalRects = [...list.querySelectorAll('.reminder-item')]
       .filter(el => el !== dragItem)
       .map(el => {
         const r = el.getBoundingClientRect();
-        return { el, midY: r.top + r.height / 2 };
+        return { el, midY: r.top + scrollY + r.height / 2 };
       });
   }
 
-  function _findDropFromY(y) {
+  function _findDropFromY(clientY) {
+    const y = clientY + (window.scrollY || window.pageYOffset);
     let target = null;
     let side = null;
     for (const r of _originalRects) {
