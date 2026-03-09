@@ -1601,39 +1601,84 @@ function initDragAndDrop() {
   const list = document.getElementById('reminderList');
   const items = list.querySelectorAll('.reminder-item');
   let dragItem = null;
+  let _dropTarget = null;
+  let _dropSide = null;
+  let _originalRects = [];
 
-  // List-level drop zone — handles dropping below the last item
+  function _setDropTarget(target, side) {
+    if (target === _dropTarget && side === _dropSide) return;
+    if (_dropTarget) _dropTarget.classList.remove('drag-over', 'drag-over-bottom');
+    _dropTarget = target;
+    _dropSide = side;
+    if (target) {
+      target.classList.add(side === 'top' ? 'drag-over' : 'drag-over-bottom');
+      if (navigator.vibrate) navigator.vibrate(15);
+    }
+  }
+
+  function _clearDropTarget() {
+    if (_dropTarget) _dropTarget.classList.remove('drag-over', 'drag-over-bottom');
+    _dropTarget = null;
+    _dropSide = null;
+  }
+
+  function _captureRects() {
+    _originalRects = [...list.querySelectorAll('.reminder-item')]
+      .filter(el => el !== dragItem)
+      .map(el => {
+        const r = el.getBoundingClientRect();
+        return { el, midY: r.top + r.height / 2 };
+      });
+  }
+
+  function _findDropFromY(y) {
+    let target = null;
+    let side = null;
+    for (const r of _originalRects) {
+      if (y < r.midY) {
+        target = r.el;
+        side = 'top';
+        return { target, side };
+      }
+      target = r.el;
+      side = 'bottom';
+    }
+    return { target, side };
+  }
+
+  // List-level drop zone — handles dropping above first / below last item
   list.addEventListener('dragover', e => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    // If not over any item, treat as "drop at end"
+    if (!dragItem) return;
     const overItem = e.target.closest('.reminder-item');
-    if (!overItem && dragItem) {
-      items.forEach(i => i.classList.remove('drag-over'));
-      // Highlight last item's bottom edge
-      const lastItem = items[items.length - 1];
-      if (lastItem && lastItem !== dragItem) lastItem.classList.add('drag-over-bottom');
+    if (!overItem) {
+      const { target, side } = _findDropFromY(e.clientY);
+      if (target) _setDropTarget(target, side);
     }
   }, sig);
 
   list.addEventListener('dragleave', e => {
-    if (!list.contains(e.relatedTarget)) {
-      items.forEach(i => { i.classList.remove('drag-over'); i.classList.remove('drag-over-bottom'); });
-    }
+    if (!list.contains(e.relatedTarget)) _clearDropTarget();
   }, sig);
 
   list.addEventListener('drop', async e => {
     e.preventDefault();
-    const overItem = e.target.closest('.reminder-item');
-    items.forEach(i => { i.classList.remove('drag-over'); i.classList.remove('drag-over-bottom'); });
-    // Only handle drops that didn't land on a specific item (those are handled per-item)
-    if (overItem || !dragItem) return;
+    const dropOnItem = e.target.closest('.reminder-item');
+    if (dropOnItem || !dragItem) { _clearDropTarget(); return; }
 
-    // Move dragged item to end
+    const overItem = _dropTarget;
+    const insertAfter = _dropSide === 'bottom';
+    _clearDropTarget();
+    if (!overItem || overItem === dragItem) return;
+
     const allItems = [...list.querySelectorAll('.reminder-item')];
     const fromIdx = allItems.indexOf(dragItem);
+    let toIdx = allItems.indexOf(overItem);
     allItems.splice(fromIdx, 1);
-    allItems.push(dragItem);
+    if (fromIdx < toIdx) toIdx--;
+    if (insertAfter) toIdx++;
+    allItems.splice(toIdx, 0, dragItem);
 
     const reorder = allItems.map((el, i) => ({
       id: el.dataset.id,
@@ -1650,6 +1695,7 @@ function initDragAndDrop() {
       dragItem = item;
       item.classList.add('dragging');
       document.body.classList.add('dragging-active');
+      _captureRects();
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', item.dataset.id);
     });
@@ -1657,7 +1703,7 @@ function initDragAndDrop() {
     item.addEventListener('dragend', () => {
       item.classList.remove('dragging');
       document.body.classList.remove('dragging-active');
-      items.forEach(i => { i.classList.remove('drag-over'); i.classList.remove('drag-over-bottom'); });
+      _clearDropTarget();
       dragItem = null;
     });
 
@@ -1666,44 +1712,27 @@ function initDragAndDrop() {
       e.stopPropagation();
       e.dataTransfer.dropEffect = 'move';
       if (item !== dragItem) {
-        items.forEach(i => { i.classList.remove('drag-over'); i.classList.remove('drag-over-bottom'); });
-        // Determine if dropping above or below based on cursor position
-        const rect = item.getBoundingClientRect();
-        const midY = rect.top + rect.height / 2;
-        if (e.clientY > midY) {
-          item.classList.add('drag-over-bottom');
-        } else {
-          item.classList.add('drag-over');
-        }
+        const { target, side } = _findDropFromY(e.clientY);
+        if (target) _setDropTarget(target, side);
       }
-    });
-
-    item.addEventListener('dragleave', () => {
-      item.classList.remove('drag-over');
-      item.classList.remove('drag-over-bottom');
     });
 
     item.addEventListener('drop', async e => {
       e.preventDefault();
       e.stopPropagation();
-      items.forEach(i => { i.classList.remove('drag-over'); i.classList.remove('drag-over-bottom'); });
-      if (!dragItem || item === dragItem) return;
-
-      // Determine insert position based on cursor vs midpoint
-      const rect = item.getBoundingClientRect();
-      const midY = rect.top + rect.height / 2;
-      const insertAfter = e.clientY > midY;
+      const overItem = _dropTarget;
+      const insertAfter = _dropSide === 'bottom';
+      _clearDropTarget();
+      if (!dragItem || !overItem || overItem === dragItem) return;
 
       const allItems = [...list.querySelectorAll('.reminder-item')];
       const fromIdx = allItems.indexOf(dragItem);
-      let toIdx = allItems.indexOf(item);
+      let toIdx = allItems.indexOf(overItem);
       allItems.splice(fromIdx, 1);
-      // Adjust toIdx after removal
       if (fromIdx < toIdx) toIdx--;
       if (insertAfter) toIdx++;
       allItems.splice(toIdx, 0, dragItem);
 
-      // Assign descending orders (highest = first)
       const reorder = allItems.map((el, i) => ({
         id: el.dataset.id,
         order: allItems.length - 1 - i
@@ -1726,6 +1755,7 @@ function initDragAndDrop() {
         dragItem = item;
         item.classList.add('dragging');
         document.body.classList.add('dragging-active');
+        _captureRects();
         // Create floating clone
         touchClone = item.cloneNode(true);
         touchClone.style.cssText = `position:fixed;left:${item.getBoundingClientRect().left}px;top:${e.touches[0].clientY - 20}px;width:${item.offsetWidth}px;opacity:0.8;z-index:9999;pointer-events:none;`;
@@ -1745,22 +1775,9 @@ function initDragAndDrop() {
       const y = e.touches[0].clientY;
       if (touchClone) touchClone.style.top = (y - 20) + 'px';
 
-      // Find which item we're over and show drop indicator
-      const prevOver = document.querySelector('.reminder-item.drag-over, .reminder-item.drag-over-bottom');
-      items.forEach(i => { i.classList.remove('drag-over'); i.classList.remove('drag-over-bottom'); });
-      const overEl = document.elementFromPoint(e.touches[0].clientX, y);
-      const overItem = overEl ? overEl.closest('.reminder-item') : null;
-      if (overItem && overItem !== dragItem) {
-        const rect = overItem.getBoundingClientRect();
-        const midY = rect.top + rect.height / 2;
-        if (y > midY) {
-          overItem.classList.add('drag-over-bottom');
-        } else {
-          overItem.classList.add('drag-over');
-        }
-        // Haptic feedback when drop zone changes
-        if (overItem !== prevOver && navigator.vibrate) navigator.vibrate(15);
-      }
+      // Use stored original positions — immune to layout shifts
+      const { target, side } = _findDropFromY(y);
+      if (target) _setDropTarget(target, side);
     }, { passive: false });
 
     handle.addEventListener('touchend', async () => {
@@ -1774,9 +1791,9 @@ function initDragAndDrop() {
       item.classList.remove('dragging');
       document.body.classList.remove('dragging-active');
 
-      const overItem = document.querySelector('.reminder-item.drag-over, .reminder-item.drag-over-bottom');
-      const insertAfter = overItem ? overItem.classList.contains('drag-over-bottom') : false;
-      items.forEach(i => { i.classList.remove('drag-over'); i.classList.remove('drag-over-bottom'); });
+      const overItem = _dropTarget;
+      const insertAfter = _dropSide === 'bottom';
+      _clearDropTarget();
       if (!overItem || overItem === dragItem) { dragItem = null; return; }
 
       const allItems = [...list.querySelectorAll('.reminder-item')];
@@ -1801,7 +1818,7 @@ function initDragAndDrop() {
       touchDragging = false;
       item.classList.remove('dragging');
       document.body.classList.remove('dragging-active');
-      items.forEach(i => { i.classList.remove('drag-over'); i.classList.remove('drag-over-bottom'); });
+      _clearDropTarget();
       if (touchClone) { document.body.removeChild(touchClone); touchClone = null; }
     });
   });
