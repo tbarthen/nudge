@@ -217,7 +217,7 @@ header .subtitle {
   background: var(--card);
   padding: 12px 14px;
   border-radius: 10px;
-  transition: background 0.2s, transform 0.15s;
+  transition: background 0.2s, transform 0.15s, margin 0.15s ease-out;
   animation: slideIn 0.2s ease-out;
   position: relative;
 }
@@ -239,35 +239,56 @@ header .subtitle {
   opacity: 0.4;
 }
 
-.reminder-item.drag-over,
-.reminder-item.drag-over-bottom {
+.reminder-item.drag-over {
+  margin-top: 52px;
   position: relative;
 }
 
 .reminder-item.drag-over::before {
-  content: '';
+  content: 'Drop here';
   position: absolute;
-  top: -4px;
-  left: -6px;
-  right: -6px;
-  height: 4px;
-  background: var(--accent);
-  border-radius: 2px;
+  top: -48px;
+  left: 0;
+  right: 0;
+  height: 42px;
+  border: 2px dashed var(--accent);
+  border-radius: 10px;
+  background: rgba(233, 69, 96, 0.08);
   z-index: 10;
-  box-shadow: 0 0 8px var(--accent), 0 0 16px rgba(233, 69, 96, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  box-shadow: 0 0 12px rgba(233, 69, 96, 0.15);
+}
+
+.reminder-item.drag-over-bottom {
+  margin-bottom: 52px;
+  position: relative;
 }
 
 .reminder-item.drag-over-bottom::after {
-  content: '';
+  content: 'Drop here';
   position: absolute;
-  bottom: -4px;
-  left: -6px;
-  right: -6px;
-  height: 4px;
-  background: var(--accent);
-  border-radius: 2px;
+  bottom: -48px;
+  left: 0;
+  right: 0;
+  height: 42px;
+  border: 2px dashed var(--accent);
+  border-radius: 10px;
+  background: rgba(233, 69, 96, 0.08);
   z-index: 10;
-  box-shadow: 0 0 8px var(--accent), 0 0 16px rgba(233, 69, 96, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  box-shadow: 0 0 12px rgba(233, 69, 96, 0.15);
 }
 
 .reminder-list {
