@@ -144,7 +144,10 @@ def _show_undo(action, item_id, item_text):
               bg=ACCENT, fg="white", bd=0, padx=10, cursor="hand2",
               command=do_undo).pack(side="right", padx=(4, 10), pady=6)
 
-    undo_frame.pack(side="bottom", fill="x")
+    try:
+        undo_frame.pack(side="bottom", fill="x", before=root._canvas)
+    except tk.TclError:
+        undo_frame.pack(side="bottom", fill="x")
 
     # Auto-dismiss after 5 seconds
     undo_frame._undo_timer = root.after(5000, _dismiss_undo)
@@ -694,7 +697,8 @@ def _populate_list(reminders, is_cache=False):
                 def after_anim():
                     def bg():
                         _api_call(port, f"/api/reminders/{r_id}/complete", "PATCH")
-                        root.after(0, lambda: [_rebuild_list(), _show_undo("complete", r_id, r_text)])
+                        root.after(0, _rebuild_list)
+                        root.after(300, lambda: _show_undo("complete", r_id, r_text))
                     threading.Thread(target=bg, daemon=True).start()
                 _animate_remove(r_row, after_anim)
             return do_complete
@@ -714,7 +718,8 @@ def _populate_list(reminders, is_cache=False):
                     def after_anim():
                         def bg():
                             _api_delete(port, f"/api/reminders/{r_id}")
-                            root.after(0, lambda: [_rebuild_list(), _show_undo("delete", r_id, r_text)])
+                            root.after(0, _rebuild_list)
+                            root.after(300, lambda: _show_undo("delete", r_id, r_text))
                         threading.Thread(target=bg, daemon=True).start()
                     _animate_remove(r_row, after_anim)
 
