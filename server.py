@@ -14,7 +14,20 @@ _data_lock = threading.Lock()
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.config["MAX_CONTENT_LENGTH"] = 256 * 1024  # 256 KB max request body (sync payloads can be large)
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+CORS(app, resources={r"/api/*": {"origins": [
+    "http://localhost:*",
+    "http://127.0.0.1:*",
+    "https://tbarthen.github.io",
+]}})
+
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Return JSON 500 for unhandled errors (e.g. disk write failures)."""
+    import traceback
+    traceback.print_exc()
+    return jsonify({"error": "internal server error"}), 500
+
 
 MAX_REMINDERS = 200
 DEFAULT_RETENTION_DAYS = 60
@@ -251,7 +264,10 @@ def reorder_reminders():
         order_map = {}
         for item in body:
             if isinstance(item, dict) and "id" in item and "order" in item and isinstance(item["order"], (int, float)):
-                order_map[str(item["id"])] = int(item["order"])
+                item_id = str(item["id"])
+                if not _is_safe_id(item_id):
+                    continue
+                order_map[item_id] = int(item["order"])
         for r in data["reminders"]:
             if r["id"] in order_map:
                 r["order"] = order_map[r["id"]]
@@ -377,7 +393,7 @@ def get_completed():
 _pairing_lock = threading.Lock()
 _pairing_code = None        # {"code": "123456", "expires": datetime}
 _pair_attempts = 0          # Failed validation attempts (rate limiting)
-_pair_attempt_reset = None  # When to reset the attempt counter
+_pair_attempt_reset = None  # datetime when to reset the attempt counter
 
 PAIR_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".paired_devices.json")
 MAX_PAIR_ATTEMPTS = 5       # Max failed attempts per 5-minute window
@@ -419,11 +435,12 @@ def generate_pairing_code():
     global _pairing_code
     with _pairing_lock:
         code = f"{secrets.randbelow(1000000):06d}"
-        expires = (datetime.now() + timedelta(minutes=5)).isoformat()
+        expires_dt = datetime.now() + timedelta(minutes=5)
         _pairing_code = {
             "code": code,
-            "expires": expires,
+            "expires": expires_dt,
         }
+        expires = expires_dt.isoformat()
     # Include local IP so phone knows where to connect
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -452,9 +469,9 @@ def validate_pairing_code():
         device_id = str(uuid.uuid4())
 
     with _pairing_lock:
-        # Rate limiting
+        # Rate limiting (proper datetime comparison)
         now = datetime.now()
-        if _pair_attempt_reset and now.isoformat() > _pair_attempt_reset:
+        if _pair_attempt_reset and now >= _pair_attempt_reset:
             _pair_attempts = 0
             _pair_attempt_reset = None
         if _pair_attempts >= MAX_PAIR_ATTEMPTS:
@@ -463,15 +480,15 @@ def validate_pairing_code():
         if not _pairing_code:
             _pair_attempts += 1
             if not _pair_attempt_reset:
-                _pair_attempt_reset = (now + timedelta(minutes=5)).isoformat()
+                _pair_attempt_reset = now + timedelta(minutes=5)
             return jsonify({"error": "no active pairing code"}), 400
-        if now.isoformat() > _pairing_code["expires"]:
+        if now >= _pairing_code["expires"]:
             _pairing_code = None
             return jsonify({"error": "pairing code expired"}), 400
-        if code != _pairing_code["code"]:
+        if not secrets.compare_digest(code, _pairing_code["code"]):
             _pair_attempts += 1
             if not _pair_attempt_reset:
-                _pair_attempt_reset = (now + timedelta(minutes=5)).isoformat()
+                _pair_attempt_reset = now + timedelta(minutes=5)
             return jsonify({"error": "invalid code"}), 400
 
         if len(_paired_devices) >= MAX_PAIRED_DEVICES and device_id not in _paired_devices:

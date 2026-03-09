@@ -1482,17 +1482,17 @@ async function undoAction() {
     }
     apiQuiet(`/api/completed/${undoData.id}/uncomplete`, 'PATCH');
   } else {
-    // Re-create the reminder
+    // Re-create the reminder with original ID to prevent sync duplicates
     const restored = {
-      id: generateId(),
+      id: undoData.reminder.id || generateId(),
       text: undoData.text,
-      created_at: new Date().toISOString(),
+      created_at: undoData.reminder.created_at || new Date().toISOString(),
       completed_at: null,
       pinned: undoData.reminder.pinned || false,
-      order: 0,
+      order: undoData.reminder.order || 0,
     };
     await idbPut('reminders', restored);
-    apiQuiet('/api/reminders', 'POST', { text: undoData.text, pinned: restored.pinned });
+    apiQuiet('/api/reminders', 'POST', restored);
   }
   undoData = null;
   loadReminders();
@@ -1595,7 +1595,8 @@ function initSwipe() {
 
 // -- Reorder --
 async function applyReorder(reorderData) {
-  for (const entry of reorderData) {
+  const safe = reorderData.filter(e => isSafeId(e.id));
+  for (const entry of safe) {
     const item = await idbGet('reminders', entry.id);
     if (item) {
       item.order = entry.order;
@@ -1603,7 +1604,7 @@ async function applyReorder(reorderData) {
       await idbPut('reminders', item);
     }
   }
-  apiQuiet('/api/reminders/reorder', 'POST', reorderData);
+  apiQuiet('/api/reminders/reorder', 'POST', safe);
 }
 
 function initDragAndDrop() {
@@ -1889,11 +1890,13 @@ async function idbGetAll(storeName) {
 }
 
 async function idbPutAll(storeName, items) {
+  if (!Array.isArray(items)) return;
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, 'readwrite');
     const store = tx.objectStore(storeName);
-    store.clear();
+    // Only clear if we have replacement data — prevents wiping on empty/bad response
+    if (items.length > 0) store.clear();
     items.forEach(item => store.put(item));
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
@@ -2012,14 +2015,14 @@ async function scanQRToPair() {
 
   // Check for camera support
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    errorEl.innerHTML = 'Camera not available. Tap <b>"Enter manually"</b> below.';
+    errorEl.textContent = 'Camera not available. Tap "Enter manually" below.';
     errorEl.style.display = 'block';
     return;
   }
 
   // Check for BarcodeDetector support
   if (!('BarcodeDetector' in window)) {
-    errorEl.innerHTML = 'QR scanning not supported in this browser. Tap <b>"Enter manually"</b> below.';
+    errorEl.textContent = 'QR scanning not supported in this browser. Tap "Enter manually" below.';
     errorEl.style.display = 'block';
     return;
   }
@@ -2053,14 +2056,18 @@ async function scanQRToPair() {
       try {
         const barcodes = await detector.detect(video);
         for (const barcode of barcodes) {
-          const url = new URL(barcode.rawValue);
-          const server = url.searchParams.get('server');
-          const code = url.searchParams.get('code');
-          if (server && code) {
-            stopQRScan();
-            await autoPairFromQR(server, code);
-            return;
-          }
+          try {
+            const url = new URL(barcode.rawValue);
+            // Only accept QR codes from our own domain
+            if (url.origin !== location.origin && url.origin !== 'https://tbarthen.github.io') continue;
+            const server = url.searchParams.get('server');
+            const code = url.searchParams.get('code');
+            if (server && code) {
+              stopQRScan();
+              await autoPairFromQR(server, code);
+              return;
+            }
+          } catch (_) { /* not a valid URL — skip */ }
         }
       } catch (e) { /* keep scanning */ }
       _qrAnimFrame = requestAnimationFrame(scanFrame);
@@ -2070,21 +2077,30 @@ async function scanQRToPair() {
     if (e.name === 'NotAllowedError') {
       showCameraBlockedHelp(errorEl);
     } else {
-      errorEl.innerHTML = 'Could not start camera. Tap <b>"Enter manually"</b> below.';
+      errorEl.textContent = 'Could not start camera. Tap "Enter manually" below.';
       errorEl.style.display = 'block';
     }
   }
 }
 
 function showCameraBlockedHelp(errorEl) {
-  errorEl.innerHTML = `
-    <b>Camera access blocked.</b> To fix:<br>
-    1. Tap the <b>lock icon</b> (or tune icon) in the address bar<br>
-    2. Set <b>Camera</b> to <b>Allow</b><br>
-    3. Tap <b>"Scan QR to Pair"</b> again<br><br>
-    <span style="font-size:0.7rem;color:var(--text-muted)">
-      Or: Android Settings → Apps → Chrome → Permissions → Camera → Allow
-    </span>`;
+  errorEl.textContent = '';
+  const b = document.createElement('b');
+  b.textContent = 'Camera access blocked.';
+  errorEl.appendChild(b);
+  errorEl.appendChild(document.createTextNode(' To fix:'));
+  errorEl.appendChild(document.createElement('br'));
+  errorEl.appendChild(document.createTextNode('1. Tap the lock icon (or tune icon) in the address bar'));
+  errorEl.appendChild(document.createElement('br'));
+  errorEl.appendChild(document.createTextNode('2. Set Camera to Allow'));
+  errorEl.appendChild(document.createElement('br'));
+  errorEl.appendChild(document.createTextNode('3. Tap "Scan QR to Pair" again'));
+  errorEl.appendChild(document.createElement('br'));
+  errorEl.appendChild(document.createElement('br'));
+  const hint = document.createElement('span');
+  hint.style.cssText = 'font-size:0.7rem;color:var(--text-muted)';
+  hint.textContent = 'Or: Android Settings \u2192 Apps \u2192 Chrome \u2192 Permissions \u2192 Camera \u2192 Allow';
+  errorEl.appendChild(hint);
   errorEl.style.display = 'block';
 }
 

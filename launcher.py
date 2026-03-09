@@ -2,6 +2,7 @@
 Nudge — DO IT!!!
 Entry point: starts Flask server in a daemon thread, then runs pystray on the main thread.
 """
+import atexit
 import ctypes
 import signal
 import sys
@@ -12,21 +13,31 @@ from tray import run_tray, _get_config
 from popup import start_popup_thread
 
 MUTEX_NAME = "NudgeDoItSingleInstance"
+_mutex_handle = None
 
 
 def _acquire_single_instance():
     """Prevent multiple instances using a Windows named mutex."""
-    mutex = ctypes.windll.kernel32.CreateMutexW(None, True, MUTEX_NAME)
+    global _mutex_handle
+    _mutex_handle = ctypes.windll.kernel32.CreateMutexW(None, True, MUTEX_NAME)
     last_error = ctypes.windll.kernel32.GetLastError()
     if last_error == 183:  # ERROR_ALREADY_EXISTS
         print("Nudge is already running.")
         sys.exit(0)
-    return mutex
+    atexit.register(_release_mutex)
+    return _mutex_handle
+
+
+def _release_mutex():
+    """Release the Windows named mutex on exit."""
+    if _mutex_handle:
+        ctypes.windll.kernel32.ReleaseMutex(_mutex_handle)
+        ctypes.windll.kernel32.CloseHandle(_mutex_handle)
 
 
 def main():
     # Single instance check
-    _mutex = _acquire_single_instance()
+    _acquire_single_instance()
 
     # Ensure data file exists
     init_data_file()

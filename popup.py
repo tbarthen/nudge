@@ -12,6 +12,7 @@ _root = None
 _initialized = threading.Event()
 _port = 5123
 _cached_reminders = []
+_auto_hide_id = None
 
 # Colors
 BG = "#1a1a2e"
@@ -578,9 +579,12 @@ def _populate_list(reminders, is_cache=False):
         if is_cache:
             # Don't act on empty cache — wait for fresh data
             return
+        global _auto_hide_id
         _resize_to_fit(0)
         tk.Label(content_frame, text="You DID it!!!", font=root._font_done, bg=BG, fg="#2ecc71").pack(pady=40)
-        root.after(2000, _hide_popup)
+        if _auto_hide_id:
+            root.after_cancel(_auto_hide_id)
+        _auto_hide_id = root.after(2000, _hide_popup)
         return
 
     _resize_to_fit(len(reminders))
@@ -774,7 +778,11 @@ def show_popup(port=5123):
 
     # Show window and refresh content — schedule on the Tk thread
     def do_show():
-        global _auto_refresh_id
+        global _auto_refresh_id, _auto_hide_id
+        # Cancel any pending auto-hide from a previous "You DID it!!!" state
+        if _auto_hide_id:
+            _root.after_cancel(_auto_hide_id)
+            _auto_hide_id = None
         _root.deiconify()
         _root.lift()
         _root.attributes("-topmost", True)
