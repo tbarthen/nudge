@@ -239,14 +239,35 @@ header .subtitle {
   opacity: 0.4;
 }
 
-.reminder-item.drag-over {
-  border-top: 2px solid var(--accent);
-  margin-top: -2px;
+.reminder-item.drag-over,
+.reminder-item.drag-over-bottom {
+  position: relative;
 }
 
-.reminder-item.drag-over-bottom {
-  border-bottom: 2px solid var(--accent);
-  margin-bottom: -2px;
+.reminder-item.drag-over::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: -6px;
+  right: -6px;
+  height: 4px;
+  background: var(--accent);
+  border-radius: 2px;
+  z-index: 10;
+  box-shadow: 0 0 8px var(--accent), 0 0 16px rgba(233, 69, 96, 0.4);
+}
+
+.reminder-item.drag-over-bottom::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: -6px;
+  right: -6px;
+  height: 4px;
+  background: var(--accent);
+  border-radius: 2px;
+  z-index: 10;
+  box-shadow: 0 0 8px var(--accent), 0 0 16px rgba(233, 69, 96, 0.4);
 }
 
 .reminder-list {
@@ -533,6 +554,10 @@ header .subtitle {
   position: relative;
   overflow: hidden;
   border-radius: 10px;
+}
+
+body.dragging-active .swipe-wrapper {
+  overflow: visible;
 }
 
 .swipe-bg {
@@ -1647,12 +1672,14 @@ function initDragAndDrop() {
       if (selectMode) { e.preventDefault(); return; }
       dragItem = item;
       item.classList.add('dragging');
+      document.body.classList.add('dragging-active');
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', item.dataset.id);
     });
 
     item.addEventListener('dragend', () => {
       item.classList.remove('dragging');
+      document.body.classList.remove('dragging-active');
       items.forEach(i => { i.classList.remove('drag-over'); i.classList.remove('drag-over-bottom'); });
       dragItem = null;
     });
@@ -1721,6 +1748,7 @@ function initDragAndDrop() {
         touchDragging = true;
         dragItem = item;
         item.classList.add('dragging');
+        document.body.classList.add('dragging-active');
         // Create floating clone
         touchClone = item.cloneNode(true);
         touchClone.style.cssText = `position:fixed;left:${item.getBoundingClientRect().left}px;top:${e.touches[0].clientY - 20}px;width:${item.offsetWidth}px;opacity:0.8;z-index:9999;pointer-events:none;`;
@@ -1764,6 +1792,7 @@ function initDragAndDrop() {
       if (!touchDragging) return;
       touchDragging = false;
       item.classList.remove('dragging');
+      document.body.classList.remove('dragging-active');
 
       const overItem = document.querySelector('.reminder-item.drag-over, .reminder-item.drag-over-bottom');
       const insertAfter = overItem ? overItem.classList.contains('drag-over-bottom') : false;
@@ -1791,6 +1820,7 @@ function initDragAndDrop() {
       clearTimeout(touchTimeout);
       touchDragging = false;
       item.classList.remove('dragging');
+      document.body.classList.remove('dragging-active');
       items.forEach(i => { i.classList.remove('drag-over'); i.classList.remove('drag-over-bottom'); });
       if (touchClone) { document.body.removeChild(touchClone); touchClone = null; }
     });
