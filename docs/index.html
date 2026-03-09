@@ -1102,8 +1102,6 @@ function showMenu(e, id, pinned, idx, total) {
     <button onclick="copyReminder('${id}')">Copy</button>
     <button onclick="startEdit('${id}')">Edit</button>
     <button onclick="togglePin('${id}', ${pinned})">${pinned ? 'Unpin' : 'Pin to top'}</button>`;
-  if (idx > 0) html += `<button onclick="moveReminder('${id}', 'up'); hideMenu()">&#9650; Move up</button>`;
-  if (idx < total - 1) html += `<button onclick="moveReminder('${id}', 'down'); hideMenu()">&#9660; Move down</button>`;
   html += `<button onclick="deleteReminder('${id}'); hideMenu()">Delete</button>`;
   html += `<button onclick="hideMenu(); enterSelectMode('${id}')">Select</button>`;
   menu.innerHTML = html;
@@ -1769,12 +1767,18 @@ function initDragAndDrop() {
       const y = e.touches[0].clientY;
       if (touchClone) touchClone.style.top = (y - 20) + 'px';
 
-      // Find which item we're over
-      items.forEach(i => i.classList.remove('drag-over'));
+      // Find which item we're over and show drop indicator
+      items.forEach(i => { i.classList.remove('drag-over'); i.classList.remove('drag-over-bottom'); });
       const overEl = document.elementFromPoint(e.touches[0].clientX, y);
       const overItem = overEl ? overEl.closest('.reminder-item') : null;
       if (overItem && overItem !== dragItem) {
-        overItem.classList.add('drag-over');
+        const rect = overItem.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        if (y > midY) {
+          overItem.classList.add('drag-over-bottom');
+        } else {
+          overItem.classList.add('drag-over');
+        }
       }
     }, { passive: false });
 
@@ -1788,14 +1792,17 @@ function initDragAndDrop() {
       touchDragging = false;
       item.classList.remove('dragging');
 
-      const overItem = document.querySelector('.reminder-item.drag-over');
-      items.forEach(i => i.classList.remove('drag-over'));
+      const overItem = document.querySelector('.reminder-item.drag-over, .reminder-item.drag-over-bottom');
+      const insertAfter = overItem ? overItem.classList.contains('drag-over-bottom') : false;
+      items.forEach(i => { i.classList.remove('drag-over'); i.classList.remove('drag-over-bottom'); });
       if (!overItem || overItem === dragItem) { dragItem = null; return; }
 
       const allItems = [...list.querySelectorAll('.reminder-item')];
       const fromIdx = allItems.indexOf(dragItem);
-      const toIdx = allItems.indexOf(overItem);
+      let toIdx = allItems.indexOf(overItem);
       allItems.splice(fromIdx, 1);
+      if (fromIdx < toIdx) toIdx--;
+      if (insertAfter) toIdx++;
       allItems.splice(toIdx, 0, dragItem);
 
       const reorder = allItems.map((el, i) => ({
@@ -1811,7 +1818,7 @@ function initDragAndDrop() {
       clearTimeout(touchTimeout);
       touchDragging = false;
       item.classList.remove('dragging');
-      items.forEach(i => i.classList.remove('drag-over'));
+      items.forEach(i => { i.classList.remove('drag-over'); i.classList.remove('drag-over-bottom'); });
       if (touchClone) { document.body.removeChild(touchClone); touchClone = null; }
     });
   });
