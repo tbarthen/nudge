@@ -90,7 +90,7 @@ def _load_data():
             return json.load(f)
     except (json.JSONDecodeError, FileNotFoundError):
         # Corrupted or missing — return safe defaults
-        return {"config": {"popup_interval_minutes": 60, "server_port": 5123, "start_with_windows": False, "completed_retention_days": 60}, "reminders": [], "completed": []}
+        return {"config": {"popup_interval_minutes": 60, "server_port": 5123, "start_with_windows": False, "completed_retention_days": 60, "auto_refresh_seconds": 90}, "reminders": [], "completed": []}
 
 
 def _get_retention_days(data=None):
@@ -142,6 +142,7 @@ def init_data_file():
                 "server_port": 5123,
                 "start_with_windows": False,
                 "completed_retention_days": 60,
+                "auto_refresh_seconds": 90,
             },
             "reminders": [],
             "completed": [],
@@ -169,7 +170,7 @@ def put_config():
     updates = request.get_json(silent=True)
     if not updates:
         return jsonify({"error": "invalid JSON body"}), 400
-    allowed = {"popup_interval_minutes", "server_port", "start_with_windows", "completed_retention_days"}
+    allowed = {"popup_interval_minutes", "server_port", "start_with_windows", "completed_retention_days", "auto_refresh_seconds"}
     with _data_lock:
         data = _load_data()
         for key in updates:
@@ -189,6 +190,10 @@ def put_config():
             elif key == "completed_retention_days":
                 if not isinstance(val, (int, float)) or val < 1:
                     return jsonify({"error": "completed_retention_days must be >= 1"}), 400
+                val = int(val)
+            elif key == "auto_refresh_seconds":
+                if not isinstance(val, (int, float)) or val < 10:
+                    return jsonify({"error": "auto_refresh_seconds must be >= 10"}), 400
                 val = int(val)
             data["config"][key] = val
         _save_data(data)

@@ -4,5 +4,6 @@ __pycache__/
 *.ico
 reminders.json
 .paired_devices.json
+.cached_reminders.json
 .claude/
 *.tmp

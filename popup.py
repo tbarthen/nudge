@@ -4,6 +4,7 @@ import ctypes
 import threading
 import urllib.request
 import json
+import os
 
 # Flag shared with tray.py
 popup_visible = False
@@ -11,8 +12,29 @@ _popup_lock = threading.Lock()
 _root = None
 _initialized = threading.Event()
 _port = 5123
-_cached_reminders = []
 _auto_hide_id = None
+
+# Persistent cache — survives restarts
+_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".cached_reminders.json")
+
+def _load_cached_reminders():
+    try:
+        with open(_CACHE_FILE, "r") as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                return data
+    except Exception:
+        pass
+    return []
+
+def _save_cached_reminders(reminders):
+    try:
+        with open(_CACHE_FILE, "w") as f:
+            json.dump(reminders, f)
+    except Exception:
+        pass
+
+_cached_reminders = _load_cached_reminders()
 
 # Colors
 BG = "#1a1a2e"
@@ -409,6 +431,7 @@ def _on_fresh_data(reminders):
     # Only re-render if data actually changed
     if reminders != _cached_reminders:
         _cached_reminders = reminders
+        _save_cached_reminders(reminders)
         _populate_list(reminders, is_cache=False)
     else:
         _cached_reminders = reminders
@@ -576,6 +599,7 @@ def _drag_end(event):
     # Optimistic update — re-render immediately with new order
     global _cached_reminders
     _cached_reminders = ordered
+    _save_cached_reminders(ordered)
     _populate_list(ordered, is_cache=False)
 
     # Sync to server in background (no rebuild needed on success)
@@ -807,17 +831,30 @@ def start_popup_thread():
 
 
 _auto_refresh_id = None
-AUTO_REFRESH_MS = 30000  # Refresh every 30s while popup is visible
+_auto_refresh_ms = 90000  # Default 90s, updated from config
+
+
+def _get_auto_refresh_ms():
+    """Read auto_refresh_seconds from server config."""
+    try:
+        url = f"http://localhost:{_port}/api/config"
+        with urllib.request.urlopen(url, timeout=1) as resp:
+            config = json.loads(resp.read().decode())
+            val = config.get("auto_refresh_seconds", 90)
+            return max(10, int(val)) * 1000
+    except Exception:
+        return _auto_refresh_ms
 
 
 def _auto_refresh():
     """Periodically refresh the list while the popup is visible."""
-    global _auto_refresh_id
+    global _auto_refresh_id, _auto_refresh_ms
     if not popup_visible or not _root:
         _auto_refresh_id = None
         return
+    _auto_refresh_ms = _get_auto_refresh_ms()
     _rebuild_list()
-    _auto_refresh_id = _root.after(AUTO_REFRESH_MS, _auto_refresh)
+    _auto_refresh_id = _root.after(_auto_refresh_ms, _auto_refresh)
 
 
 def show_popup(port=5123):
@@ -846,6 +883,6 @@ def show_popup(port=5123):
         _rebuild_list()
         # Start auto-refresh loop
         if _auto_refresh_id is None:
-            _auto_refresh_id = _root.after(AUTO_REFRESH_MS, _auto_refresh)
+            _auto_refresh_id = _root.after(_auto_refresh_ms, _auto_refresh)
 
     _root.after(0, do_show)

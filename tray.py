@@ -249,6 +249,135 @@ def _share_app(port):
         popup._root.after(0, do_share)
 
 
+def _show_settings(port):
+    """Show a settings dialog."""
+    import tkinter as tk
+
+    def do_settings():
+        config = _get_config()
+        win = tk.Toplevel(popup._root)
+        win.overrideredirect(True)
+        win.attributes("-topmost", True)
+        win.configure(bg=popup.BG)
+
+        screen_w = win.winfo_screenwidth()
+        screen_h = win.winfo_screenheight()
+        w, h = 340, 340
+        win.geometry(f"{w}x{h}+{(screen_w - w) // 2}+{(screen_h - h) // 2}")
+
+        # Draggable title bar
+        title_frame = tk.Frame(win, bg=popup.ACCENT, height=36)
+        title_frame.pack(fill="x")
+        title_frame.pack_propagate(False)
+        tk.Label(title_frame, text="Settings", font=("Segoe UI", 12, "bold"),
+                 bg=popup.ACCENT, fg="white").pack(side="left", padx=12, pady=6)
+        tk.Button(title_frame, text="\u2715", font=("Segoe UI", 10), bg=popup.ACCENT, fg="white",
+                  bd=0, activebackground="#c0392b", cursor="hand2",
+                  command=win.destroy).pack(side="right", padx=8)
+
+        def start_drag(e):
+            win._drag_x, win._drag_y = e.x, e.y
+        def do_drag(e):
+            win.geometry(f"+{win.winfo_x() + e.x - win._drag_x}+{win.winfo_y() + e.y - win._drag_y}")
+        title_frame.bind("<Button-1>", start_drag)
+        title_frame.bind("<B1-Motion>", do_drag)
+
+        body = tk.Frame(win, bg=popup.BG)
+        body.pack(fill="both", expand=True, padx=16, pady=12)
+
+        row_font = ("Segoe UI", 10)
+        label_fg = "#8a8aaa"
+
+        # Popup interval
+        tk.Label(body, text="Popup interval", font=row_font, bg=popup.BG, fg=label_fg,
+                 anchor="w").pack(fill="x", pady=(0, 2))
+        interval_frame = tk.Frame(body, bg=popup.BG)
+        interval_frame.pack(fill="x", pady=(0, 12))
+        interval_var = tk.StringVar(value=str(config.get("popup_interval_minutes", 60)))
+        interval_options = [("1 min (test)", "1"), ("15 min", "15"), ("30 min", "30"),
+                            ("45 min", "45"), ("60 min", "60"), ("90 min", "90"), ("2 hours", "120")]
+        for text, val in interval_options:
+            tk.Radiobutton(interval_frame, text=text, variable=interval_var, value=val,
+                           font=("Segoe UI", 9), bg=popup.BG, fg=popup.FG,
+                           selectcolor=popup.CARD_BG, activebackground=popup.BG,
+                           activeforeground=popup.FG, anchor="w",
+                           highlightthickness=0, bd=0).pack(anchor="w")
+
+        # Auto-refresh
+        tk.Label(body, text="List auto-refresh", font=row_font, bg=popup.BG, fg=label_fg,
+                 anchor="w").pack(fill="x", pady=(0, 2))
+        refresh_frame = tk.Frame(body, bg=popup.BG)
+        refresh_frame.pack(fill="x", pady=(0, 12))
+        refresh_entry = tk.Entry(refresh_frame, font=row_font, bg=popup.CARD_BG, fg=popup.FG,
+                                 insertbackground=popup.FG, bd=0, width=5)
+        refresh_entry.insert(0, str(config.get("auto_refresh_seconds", 90)))
+        refresh_entry.pack(side="left", ipady=2)
+        tk.Label(refresh_frame, text="seconds", font=("Segoe UI", 9), bg=popup.BG, fg=label_fg).pack(side="left", padx=6)
+
+        # Completed retention
+        tk.Label(body, text="Keep completed items for", font=row_font, bg=popup.BG, fg=label_fg,
+                 anchor="w").pack(fill="x", pady=(0, 2))
+        ret_frame = tk.Frame(body, bg=popup.BG)
+        ret_frame.pack(fill="x", pady=(0, 12))
+        ret_entry = tk.Entry(ret_frame, font=row_font, bg=popup.CARD_BG, fg=popup.FG,
+                             insertbackground=popup.FG, bd=0, width=5)
+        ret_entry.insert(0, str(config.get("completed_retention_days", 60)))
+        ret_entry.pack(side="left", ipady=2)
+        tk.Label(ret_frame, text="days", font=("Segoe UI", 9), bg=popup.BG, fg=label_fg).pack(side="left", padx=6)
+
+        # Start with Windows
+        start_var = tk.BooleanVar(value=config.get("start_with_windows", False))
+        tk.Checkbutton(body, text="Start with Windows", variable=start_var,
+                       font=row_font, bg=popup.BG, fg=popup.FG,
+                       selectcolor=popup.CARD_BG, activebackground=popup.BG,
+                       activeforeground=popup.FG, highlightthickness=0, bd=0).pack(anchor="w", pady=(0, 12))
+
+        def save():
+            updates = {}
+            try:
+                iv = int(interval_var.get())
+                if iv >= 1:
+                    updates["popup_interval_minutes"] = iv
+            except ValueError:
+                pass
+            try:
+                rs = int(refresh_entry.get())
+                if rs >= 10:
+                    updates["auto_refresh_seconds"] = rs
+            except ValueError:
+                pass
+            try:
+                rd = int(ret_entry.get())
+                if rd >= 1:
+                    updates["completed_retention_days"] = rd
+            except ValueError:
+                pass
+            updates["start_with_windows"] = start_var.get()
+
+            if updates:
+                def bg():
+                    try:
+                        url = f"http://localhost:{port}/api/config"
+                        data = json.dumps(updates).encode()
+                        req = urllib.request.Request(url, method="PUT", data=data)
+                        req.add_header("Content-Type", "application/json")
+                        urllib.request.urlopen(req, timeout=2)
+                    except Exception:
+                        pass
+                threading.Thread(target=bg, daemon=True).start()
+            win.destroy()
+
+        tk.Button(body, text="Save", font=("Segoe UI", 10, "bold"), bg=popup.ACCENT, fg="white",
+                  bd=0, padx=16, cursor="hand2", command=save).pack(side="left")
+        tk.Button(body, text="Cancel", font=("Segoe UI", 10), bg=popup.CARD_BG, fg=popup.FG,
+                  bd=0, padx=12, cursor="hand2", command=win.destroy).pack(side="left", padx=8)
+
+        win.bind("<Escape>", lambda e: win.destroy())
+
+    if popup._root:
+        popup._root.after(0, do_settings)
+
+
 def run_tray(stop_event=None):
     """Run the system tray icon. Blocks on main thread or calling thread."""
     if stop_event is None:
@@ -268,6 +397,10 @@ def run_tray(stop_event=None):
         port = _get_port()
         _share_app(port)
 
+    def on_settings(icon, item):
+        port = _get_port()
+        _show_settings(port)
+
     def on_quit(icon, item):
         stop_event.set()
         icon.stop()
@@ -276,6 +409,7 @@ def run_tray(stop_event=None):
         pystray.MenuItem("Show Reminders", on_show_reminders, default=True, visible=False),
         pystray.MenuItem("Pair Phone", on_pair),
         pystray.MenuItem("Share", on_share),
+        pystray.MenuItem("Settings", on_settings),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Quit", on_quit),
     )

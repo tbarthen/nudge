@@ -1,0 +1,26 @@
+# Nudge — Project Instructions
+
+## Deploying PWA changes
+
+When modifying `docs/index.html` (the GitHub Pages PWA):
+
+1. Mirror the same change in `templates/index.html` (Flask-served desktop UI) unless the change is PWA-only
+2. Bump `CACHE_NAME` in `docs/sw.js` (e.g. `nudge-v22` → `nudge-v23`) so phones pick up the update
+3. If `static/sw.js` was also changed, bump its `CACHE_NAME` too
+4. Commit and **push to GitHub** — the PWA is served from GitHub Pages via the `docs/` folder on `master`
+
+Without the cache bump, phones will keep serving the old cached version indefinitely.
+
+## Architecture
+
+- **Desktop app**: Python (Flask + pystray + tkinter). Entry point: `launcher.py`
+- **PWA**: `docs/` folder served by GitHub Pages. Standalone offline app using IndexedDB
+- **Data sync**: Phone pairs with desktop server over local network. Desktop is source of truth
+- **Data file**: `reminders.json` (gitignored, auto-created)
+
+## Key conventions
+
+- All data mutations go through the Flask REST API (even from the desktop popup)
+- `docs/index.html` and `templates/index.html` are mirrors — keep them in sync
+- `docs/sw.js` and `static/sw.js` are mirrors (different path prefixes: relative vs `/static/`)
+- Restart command: `taskkill //F //IM pythonw.exe; cd c:/DEV/nudge && pythonw launcher.py`
