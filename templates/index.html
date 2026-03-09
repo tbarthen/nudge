@@ -1090,10 +1090,16 @@ async function togglePin(id, currentlyPinned) {
 }
 
 // -- Context menu --
+function copyReminder(id) {
+  const el = document.querySelector(`.reminder-item[data-id="${id}"] .text`);
+  if (el) navigator.clipboard.writeText(el.textContent);
+  hideMenu();
+}
 function showMenu(e, id, pinned, idx, total) {
   e.stopPropagation();
   const menu = document.getElementById('contextMenu');
   let html = `
+    <button onclick="copyReminder('${id}')">Copy</button>
     <button onclick="startEdit('${id}')">Edit</button>
     <button onclick="togglePin('${id}', ${pinned})">${pinned ? 'Unpin' : 'Pin to top'}</button>`;
   if (idx > 0) html += `<button onclick="moveReminder('${id}', 'up'); hideMenu()">&#9650; Move up</button>`;
