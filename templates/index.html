@@ -236,7 +236,22 @@ header .subtitle {
 .drag-handle:active { cursor: grabbing; }
 
 .reminder-item.dragging {
-  opacity: 0.4;
+  height: 0 !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.swipe-wrapper.dragging-source {
+  height: 0 !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  overflow: hidden;
 }
 
 .reminder-item.drag-over {
@@ -1694,14 +1709,18 @@ function initDragAndDrop() {
       if (selectMode) { e.preventDefault(); return; }
       dragItem = item;
       item.classList.add('dragging');
+      const wrapper = item.closest('.swipe-wrapper');
+      if (wrapper) wrapper.classList.add('dragging-source');
       document.body.classList.add('dragging-active');
-      _captureRects();
+      requestAnimationFrame(() => _captureRects());
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', item.dataset.id);
     });
 
     item.addEventListener('dragend', () => {
       item.classList.remove('dragging');
+      const wrapper = item.closest('.swipe-wrapper');
+      if (wrapper) wrapper.classList.remove('dragging-source');
       document.body.classList.remove('dragging-active');
       _clearDropTarget();
       dragItem = null;
@@ -1753,13 +1772,18 @@ function initDragAndDrop() {
       touchTimeout = setTimeout(() => {
         touchDragging = true;
         dragItem = item;
-        item.classList.add('dragging');
-        document.body.classList.add('dragging-active');
-        _captureRects();
-        // Create floating clone
+        // Clone before collapsing so dimensions are correct
         touchClone = item.cloneNode(true);
-        touchClone.style.cssText = `position:fixed;left:${item.getBoundingClientRect().left}px;top:${e.touches[0].clientY - 20}px;width:${item.offsetWidth}px;opacity:0.8;z-index:9999;pointer-events:none;`;
+        const itemRect = item.getBoundingClientRect();
+        touchClone.style.cssText = `position:fixed;left:${itemRect.left}px;top:${e.touches[0].clientY - 20}px;width:${itemRect.width}px;opacity:0.8;z-index:9999;pointer-events:none;`;
         document.body.appendChild(touchClone);
+        // Collapse original item
+        item.classList.add('dragging');
+        const wrapper = item.closest('.swipe-wrapper');
+        if (wrapper) wrapper.classList.add('dragging-source');
+        document.body.classList.add('dragging-active');
+        // Capture rects after collapse takes effect
+        requestAnimationFrame(() => _captureRects());
         if (navigator.vibrate) navigator.vibrate(30);
       }, 400);
     }, { passive: true });
@@ -1789,6 +1813,8 @@ function initDragAndDrop() {
       if (!touchDragging) return;
       touchDragging = false;
       item.classList.remove('dragging');
+      const wrapperEnd = item.closest('.swipe-wrapper');
+      if (wrapperEnd) wrapperEnd.classList.remove('dragging-source');
       document.body.classList.remove('dragging-active');
 
       const overItem = _dropTarget;
@@ -1817,6 +1843,8 @@ function initDragAndDrop() {
       clearTimeout(touchTimeout);
       touchDragging = false;
       item.classList.remove('dragging');
+      const wrapperCancel = item.closest('.swipe-wrapper');
+      if (wrapperCancel) wrapperCancel.classList.remove('dragging-source');
       document.body.classList.remove('dragging-active');
       _clearDropTarget();
       if (touchClone) { document.body.removeChild(touchClone); touchClone = null; }
