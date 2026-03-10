@@ -871,6 +871,11 @@ body.select-mode .reminder-item[draggable] { draggable: false; }
     </div>
     <div class="completed-list" id="completedList"></div>
   </div>
+
+  <div class="archived-section" id="archivedSection" style="display:none">
+    <div class="archived-toggle" onclick="toggleArchived()">Show archived</div>
+    <div class="archived-list" id="archivedList" style="display:none"></div>
+  </div>
 </div>
 
 <!-- Undo toast -->
@@ -1046,19 +1051,15 @@ function isSafeId(id) {
 async function loadReminders() {
   const list = document.getElementById('reminderList');
   let reminders;
-  let archived = [];
   try {
     reminders = await idbGetAll('reminders');
-    const allValid = reminders.filter(r => isSafeId(r.id) && r.text && typeof r.text === 'string');
-    reminders = allValid.filter(r => !r.hidden);
-    archived = allValid.filter(r => r.hidden);
+    reminders = reminders.filter(r => isSafeId(r.id) && r.text && typeof r.text === 'string' && !r.hidden);
     reminders.sort((a, b) => (b.order || 0) - (a.order || 0));
   } catch (_) {
     reminders = [];
-    archived = [];
   }
 
-  if (reminders.length === 0 && archived.length === 0) {
+  if (reminders.length === 0) {
     list.innerHTML = '<div class="empty-state"><div class="emoji">&#128170;</div><p>No reminders yet. Add one above!<br><span style="font-size:0.8rem;color:var(--text-muted)">e.g. "Eat spaghetti with hand tied behind back"</span></p></div>';
     return;
   }
@@ -1087,15 +1088,8 @@ async function loadReminders() {
     </div>`;
   }).join('');
 
-  if (archived.length > 0) {
-    const isOpen = document.querySelector('.archived-items')?.style.display !== 'none';
-    html += `<div class="archived-toggle" onclick="const s=this.nextElementSibling;s.style.display=s.style.display==='none'?'block':'none';this.textContent=s.style.display==='none'?'Show ${archived.length} archived':'Hide archived'">${isOpen ? 'Hide archived' : 'Show ' + archived.length + ' archived'}</div>`;
-    html += `<div class="archived-items" style="display:${isOpen ? 'block' : 'none'}">`;
-    html += archived.map(r => `<div class="reminder-item archived-item"><span class="text">${escapeHtml(r.text)}</span></div>`).join('');
-    html += '</div>';
-  }
-
   list.innerHTML = html;
+  loadArchived();
 
   // Restore selection state if in select mode
   if (selectMode && prevSelected.size > 0) {
@@ -1252,6 +1246,7 @@ async function loadCompleted() {
     </div>`;
   }).join('');
   initCompletedSwipe();
+  loadArchived();
 }
 
 function toggleCompleted() {
@@ -1259,6 +1254,53 @@ function toggleCompleted() {
   const arrow = document.getElementById('completedArrow');
   list.classList.toggle('open');
   arrow.classList.toggle('open');
+}
+
+async function loadArchived() {
+  let archivedReminders = [], archivedCompleted = [];
+  try {
+    const allReminders = await idbGetAll('reminders');
+    archivedReminders = allReminders.filter(r => r.hidden && isSafeId(r.id) && r.text);
+    const allCompleted = await idbGetAll('completed');
+    archivedCompleted = allCompleted.filter(c => c.hidden && isSafeId(c.id) && c.text);
+  } catch (_) {}
+
+  const section = document.getElementById('archivedSection');
+  const list = document.getElementById('archivedList');
+  const total = archivedReminders.length + archivedCompleted.length;
+
+  if (total === 0) {
+    section.style.display = 'none';
+    return;
+  }
+
+  section.style.display = 'block';
+  const toggle = section.querySelector('.archived-toggle');
+  const isOpen = list.style.display !== 'none';
+  toggle.textContent = isOpen ? 'Hide archived' : `Show ${total} archived`;
+
+  let html = '';
+  archivedReminders.forEach(r => {
+    html += `<div class="reminder-item archived-item"><span class="text">${escapeHtml(r.text)}</span></div>`;
+  });
+  archivedCompleted.forEach(c => {
+    html += `<div class="reminder-item archived-item"><span class="text">${escapeHtml(c.text)}</span><span class="time" style="opacity:0.5">${formatTime(c.completed_at)}</span></div>`;
+  });
+  list.innerHTML = html;
+}
+
+function toggleArchived() {
+  const list = document.getElementById('archivedList');
+  const toggle = document.querySelector('.archived-toggle');
+  const showing = list.style.display === 'none';
+  list.style.display = showing ? 'block' : 'none';
+  // Update text — need to re-count
+  if (!showing) {
+    toggle.textContent = 'Show archived';
+    loadArchived();
+  } else {
+    toggle.textContent = 'Hide archived';
+  }
 }
 
 // -- Settings --
