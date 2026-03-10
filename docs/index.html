@@ -2004,7 +2004,9 @@ function initDragAndDrop() {
   }
 
   function _clearDropTarget() {
-    if (_dropTarget) _dropTarget.classList.remove('drag-over', 'drag-over-bottom');
+    list.querySelectorAll('.drag-over, .drag-over-bottom').forEach(el =>
+      el.classList.remove('drag-over', 'drag-over-bottom')
+    );
     _dropTarget = null;
     _dropSide = null;
   }
@@ -2097,9 +2099,12 @@ function initDragAndDrop() {
       item.classList.remove('dragging');
       const wrapper = item.closest('.swipe-wrapper');
       if (wrapper) wrapper.classList.remove('dragging-source');
-      document.body.classList.remove('dragging-active');
       _clearDropTarget();
       dragItem = null;
+      // Keep dragging-active briefly to suppress hover during reflow
+      requestAnimationFrame(() => {
+        document.body.classList.remove('dragging-active');
+      });
     });
 
     item.addEventListener('dragover', e => {
