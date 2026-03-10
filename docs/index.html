@@ -1226,7 +1226,7 @@ async function loadCompleted() {
   let completed;
   try {
     completed = await idbGetAll('completed');
-    completed = completed.filter(c => isSafeId(c.id) && c.text && typeof c.text === 'string');
+    completed = completed.filter(c => isSafeId(c.id) && c.text && typeof c.text === 'string' && !c.hidden);
     completed.sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''));
   } catch (_) {
     completed = [];
@@ -1827,7 +1827,11 @@ function initCompletedSwipe() {
         item.style.transform = `translateX(-${window.innerWidth}px)`;
         setTimeout(async () => {
           const idbItem = await idbGet('completed', id);
-          await idbDelete('completed', id);
+          if (idbItem) {
+            idbItem.hidden = true;
+            idbItem.hidden_at = new Date().toISOString();
+            await idbPut('completed', idbItem);
+          }
           loadCompleted();
           apiQuiet(`/api/completed/${id}`, 'DELETE');
         }, 300);
@@ -2529,9 +2533,18 @@ async function syncNow() {
       if (hiddenMap[r.id]) { r.hidden = hiddenMap[r.id].hidden; r.hidden_at = hiddenMap[r.id].hidden_at; }
       return r;
     });
+    const localCompleted = await idbGetAll('completed');
+    const hiddenCompletedMap = {};
+    localCompleted.forEach(c => {
+      if (c.hidden) hiddenCompletedMap[c.id] = { hidden: c.hidden, hidden_at: c.hidden_at };
+    });
+    const mergedCompleted = (merged.completed || []).filter(c => isSafeId(c.id)).map(c => {
+      if (hiddenCompletedMap[c.id]) { c.hidden = hiddenCompletedMap[c.id].hidden; c.hidden_at = hiddenCompletedMap[c.id].hidden_at; }
+      return c;
+    });
     await Promise.all([
       idbPutAll('reminders', mergedReminders),
-      idbPutAll('completed', (merged.completed || []).filter(c => isSafeId(c.id))),
+      idbPutAll('completed', mergedCompleted),
     ]);
 
     localStorage.setItem('nudge-last-sync', new Date().toISOString());
