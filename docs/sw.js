@@ -1,7 +1,8 @@
-const CACHE_NAME = 'nudge-v34';
+const CACHE_NAME = 'nudge-v35';
 const ASSETS = [
   './',
   'manifest.json',
+  'Sortable.min.js',
 ];
 
 // Install — cache shell assets
