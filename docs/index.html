@@ -1238,6 +1238,7 @@ async function loadCompleted() {
     const safeId = escapeAttr(c.id);
     return `
     <div class="swipe-wrapper completed-swipe" data-id="${safeId}">
+      <div class="swipe-bg swipe-bg-complete" style="display:none">&#8617; Restore</div>
       <div class="swipe-bg swipe-bg-delete" style="display:none">Delete &#128465;</div>
       <div class="completed-item" data-id="${safeId}">
         <span class="text">${escapeHtml(c.text)}</span>
@@ -1821,6 +1822,7 @@ function initCompletedSwipe() {
   const wrappers = document.querySelectorAll('.completed-swipe');
   wrappers.forEach(wrapper => {
     const item = wrapper.querySelector('.completed-item');
+    const bgComplete = wrapper.querySelector('.swipe-bg-complete');
     const bgDelete = wrapper.querySelector('.swipe-bg-delete');
     let startX = 0, startY = 0, currentX = 0, swiping = false;
     let directionLocked = false, isHorizontal = false;
@@ -1850,9 +1852,9 @@ function initCompletedSwipe() {
 
       if (!isHorizontal) return;
 
-      // Only allow swipe left (delete)
-      currentX = Math.min(0, dx);
-      if (currentX < 0) bgDelete.style.display = 'flex';
+      currentX = dx;
+      if (currentX > 0) { bgComplete.style.display = 'flex'; bgDelete.style.display = 'none'; }
+      if (currentX < 0) { bgDelete.style.display = 'flex'; bgComplete.style.display = 'none'; }
       item.style.transform = `translateX(${currentX}px)`;
     }, { passive: true });
 
@@ -1863,8 +1865,31 @@ function initCompletedSwipe() {
       if (!isHorizontal) return;
 
       const id = wrapper.dataset.id;
+      const text = item.querySelector('.text')?.textContent || '';
 
-      if (currentX < -SWIPE_THRESHOLD) {
+      if (currentX > SWIPE_THRESHOLD) {
+        // Swipe right — restore to active reminders
+        item.classList.add('dismissing');
+        item.style.transform = `translateX(${window.innerWidth}px)`;
+        setTimeout(async () => {
+          const completedItem = await idbGet('completed', id);
+          if (completedItem) {
+            const restored = {
+              id: completedItem.id,
+              text: completedItem.text,
+              created_at: completedItem.created_at || new Date().toISOString(),
+              completed_at: null,
+              order: completedItem.order || 0,
+            };
+            await idbPut('reminders', restored);
+            await idbDelete('completed', id);
+          }
+          loadReminders();
+          loadCompleted();
+          apiQuiet(`/api/completed/${id}/uncomplete`, 'PATCH');
+        }, 300);
+      } else if (currentX < -SWIPE_THRESHOLD) {
+        // Swipe left — delete
         item.classList.add('dismissing');
         item.style.transform = `translateX(-${window.innerWidth}px)`;
         setTimeout(async () => {
@@ -1880,7 +1905,7 @@ function initCompletedSwipe() {
       } else {
         item.classList.add('snapping');
         item.style.transform = 'translateX(0)';
-        setTimeout(() => { bgDelete.style.display = 'none'; }, 200);
+        setTimeout(() => { bgDelete.style.display = 'none'; bgComplete.style.display = 'none'; }, 200);
       }
     });
 
