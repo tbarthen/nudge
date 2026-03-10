@@ -602,6 +602,22 @@ header .subtitle {
   font-size: 1rem;
 }
 
+/* Archived items */
+.archived-toggle {
+  text-align: center;
+  padding: 10px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.archived-toggle:hover { text-decoration: underline; }
+.archived-item {
+  opacity: 0.5;
+  text-decoration: line-through;
+  pointer-events: none;
+  padding: 10px 16px;
+}
+
 /* Swipe container */
 .swipe-wrapper {
   position: relative;
@@ -1032,13 +1048,16 @@ async function loadReminders() {
   let reminders;
   try {
     reminders = await idbGetAll('reminders');
-    reminders = reminders.filter(r => isSafeId(r.id) && r.text && typeof r.text === 'string' && !r.hidden);
+    const allValid = reminders.filter(r => isSafeId(r.id) && r.text && typeof r.text === 'string');
+    reminders = allValid.filter(r => !r.hidden);
+    const archived = allValid.filter(r => r.hidden);
     reminders.sort((a, b) => (b.order || 0) - (a.order || 0));
   } catch (_) {
     reminders = [];
+    var archived = [];
   }
 
-  if (reminders.length === 0) {
+  if (reminders.length === 0 && archived.length === 0) {
     list.innerHTML = '<div class="empty-state"><div class="emoji">&#128170;</div><p>No reminders yet. Add one above!<br><span style="font-size:0.8rem;color:var(--text-muted)">e.g. "Eat spaghetti with hand tied behind back"</span></p></div>';
     return;
   }
@@ -1046,7 +1065,7 @@ async function loadReminders() {
   // Preserve selection state across reloads
   const prevSelected = new Set(selectedIds);
 
-  list.innerHTML = reminders.map((r, idx) => {
+  let html = reminders.map((r, idx) => {
     const safeId = escapeAttr(r.id);
     return `
     <div class="swipe-wrapper" data-id="${safeId}">
@@ -1066,6 +1085,16 @@ async function loadReminders() {
       </div>
     </div>`;
   }).join('');
+
+  if (archived.length > 0) {
+    const isOpen = document.querySelector('.archived-items')?.style.display !== 'none';
+    html += `<div class="archived-toggle" onclick="const s=this.nextElementSibling;s.style.display=s.style.display==='none'?'block':'none';this.textContent=s.style.display==='none'?'Show ${archived.length} archived':'Hide archived'">${isOpen ? 'Hide archived' : 'Show ' + archived.length + ' archived'}</div>`;
+    html += `<div class="archived-items" style="display:${isOpen ? 'block' : 'none'}">`;
+    html += archived.map(r => `<div class="reminder-item archived-item"><span class="text">${escapeHtml(r.text)}</span></div>`).join('');
+    html += '</div>';
+  }
+
+  list.innerHTML = html;
 
   // Restore selection state if in select mode
   if (selectMode && prevSelected.size > 0) {
