@@ -11,8 +11,8 @@ import pystray
 from PIL import Image, ImageDraw
 
 import popup
+from data import DATA_FILE
 
-DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reminders.json")
 ICON_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.ico")
 
 

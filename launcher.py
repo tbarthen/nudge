@@ -8,7 +8,8 @@ import signal
 import sys
 import threading
 
-from server import app, init_data_file
+from data import init_data_file
+from server import app
 from tray import run_tray, _get_config
 from popup import start_popup_thread
 

@@ -7,16 +7,15 @@ validation, retention, and capacity limits.
 
 import json
 import os
-import tempfile
 import threading
 import time
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
 
 import pytest
 
-# Set up a temp data file before importing server
-_test_data_file = os.path.join(tempfile.gettempdir(), f"nudge_test_{os.getpid()}.json")
+import data as data_mod
+import pairing
+import server
 
 
 @pytest.fixture(autouse=True)
@@ -24,16 +23,13 @@ def fresh_server(tmp_path):
     """Reset server state before each test."""
     data_file = str(tmp_path / "reminders.json")
 
-    import server
-    server.DATA_FILE = data_file
-    server._data = None  # Force reload
-    server._pairing_code = None
-    server._pairing_expiry = None
-    server._paired_devices = set()
-    server._pairing_attempts = {}
+    data_mod.DATA_FILE = data_file
+    data_mod.init_data_file()
 
-    # Write fresh empty data
-    server._load_data()
+    pairing._pairing_code = None
+    pairing._pair_attempts = 0
+    pairing._pair_attempt_reset = None
+    pairing.paired_devices = set()
 
     app = server.app
     app.config["TESTING"] = True
@@ -296,18 +292,18 @@ class TestCompleted:
 
 class TestRetention:
     def test_old_completed_pruned_on_get(self, fresh_server):
-        import server
+
         # Create and complete a reminder
         r = _post_reminder(fresh_server).get_json()
         _complete(fresh_server, r["id"])
 
         # Manually age the completed item beyond retention
-        data = server._load_data()
+        data = data_mod.load_data()
         for c in data["completed"]:
             if c["id"] == r["id"]:
                 old_date = (datetime.now(timezone.utc) - timedelta(days=100)).isoformat()
                 c["completed_at"] = old_date
-        server._save_data(data)
+        data_mod.save_data(data)
 
         completed = _get_completed(fresh_server)
         assert len(completed) == 0
@@ -408,10 +404,10 @@ class TestPairing:
         assert resp.status_code == 400  # Server returns 400, not 403
 
     def test_validate_expired_code(self, fresh_server):
-        import server
+
         code = fresh_server.post("/api/pair/generate").get_json()["code"]
         # Manually expire the pairing code dict
-        server._pairing_code["expires"] = datetime.now() - timedelta(minutes=1)
+        pairing._pairing_code["expires"] = datetime.now() - timedelta(minutes=1)
         resp = fresh_server.post("/api/pair/validate", json={"code": code})
         assert resp.status_code == 400  # Server returns 400 for expired
 
@@ -447,8 +443,7 @@ class TestPairing:
 
 def _pair_device(client, device_id="test-device"):
     """Helper to pair a device for sync tests."""
-    import server
-    server._paired_devices.add(device_id)
+    pairing.paired_devices.add(device_id)
 
 
 class TestSync:
@@ -503,7 +498,7 @@ class TestSync:
     def test_sync_deleted_ids_not_resurrected(self, fresh_server):
         """Items in deleted_ids should not come back via sync."""
         _pair_device(fresh_server)
-        import server
+
 
         # Create and delete a reminder (adds to deleted_ids)
         _post_reminder(fresh_server, "Gone", id="del-1")
@@ -542,20 +537,20 @@ class TestSync:
     def test_sync_latest_update_wins(self, fresh_server):
         """When both sides have the same active item, latest updated_at wins."""
         _pair_device(fresh_server)
-        import server
+
 
         old = "2020-01-01T00:00:00+00:00"
         new = "2026-01-01T00:00:00+00:00"
 
         # Create item, then manually set old timestamps
         _post_reminder(fresh_server, "Old text", id="merge-1")
-        data = server._load_data()
+        data = data_mod.load_data()
         for r in data["reminders"]:
             if r["id"] == "merge-1":
                 r["updated_at"] = old
                 r["created_at"] = old
                 r["text"] = "Old text"
-        server._save_data(data)
+        data_mod.save_data(data)
 
         # Phone sends same item with newer timestamp
         resp = fresh_server.post("/api/sync", json={
@@ -646,19 +641,19 @@ class TestTimestampClamping:
 class TestSoftDelete:
     def test_deleted_reminder_tracked(self, fresh_server):
         """Deleting a reminder should add its ID to deleted_ids."""
-        import server
+
         r = _post_reminder(fresh_server, id="track-del").get_json()
         fresh_server.delete("/api/reminders/track-del")
-        data = server._load_data()
+        data = data_mod.load_data()
         assert "track-del" in data.get("deleted_ids", [])
 
     def test_deleted_ids_capped(self, fresh_server):
         """deleted_ids should not grow beyond 500."""
-        import server
+
         for i in range(510):
             _post_reminder(fresh_server, f"Item {i}", id=f"cap-{i}")
             fresh_server.delete(f"/api/reminders/cap-{i}")
-        data = server._load_data()
+        data = data_mod.load_data()
         assert len(data.get("deleted_ids", [])) <= 500
 
 
@@ -667,7 +662,7 @@ class TestSoftDelete:
 class TestConcurrency:
     def test_concurrent_creates(self, fresh_server):
         """Multiple threads creating reminders should not corrupt data."""
-        import server
+
         app = server.app
         errors = []
 
@@ -758,9 +753,9 @@ class TestEdgeCases:
 class TestCorruptionResilience:
     def test_corrupted_data_file_recovers(self, fresh_server, tmp_path):
         """Server should recover from a corrupted JSON file."""
-        import server
+
         # Write garbage to the data file
-        with open(server.DATA_FILE, "w") as f:
+        with open(data_mod.DATA_FILE, "w") as f:
             f.write("{{{invalid json")
         # Server should return defaults, not crash
         items = _get_reminders(fresh_server)
@@ -768,10 +763,10 @@ class TestCorruptionResilience:
 
     def test_missing_data_file_recovers(self, fresh_server, tmp_path):
         """Server should recover if data file is deleted mid-session."""
-        import server
+
         # Ensure file exists first by creating something
         _post_reminder(fresh_server, "Temp")
-        os.remove(server.DATA_FILE)
+        os.remove(data_mod.DATA_FILE)
         items = _get_reminders(fresh_server)
         assert items == []
         # Should be able to create new items
@@ -780,8 +775,8 @@ class TestCorruptionResilience:
 
     def test_partial_data_file(self, fresh_server, tmp_path):
         """Data file missing expected keys should not crash."""
-        import server
-        with open(server.DATA_FILE, "w") as f:
+
+        with open(data_mod.DATA_FILE, "w") as f:
             json.dump({"config": {}}, f)  # Missing reminders/completed
         items = _get_reminders(fresh_server)
         # Should handle missing keys gracefully
@@ -867,9 +862,9 @@ class TestMalformedRequests:
 class TestMultiDeviceSync:
     def test_two_devices_add_different_items(self, fresh_server):
         """Two devices adding different items should merge cleanly."""
-        import server
-        server._paired_devices.add("phone-1")
-        server._paired_devices.add("phone-2")
+
+        pairing.paired_devices.add("phone-1")
+        pairing.paired_devices.add("phone-2")
         now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
         # Phone 1 syncs with item A
@@ -892,9 +887,9 @@ class TestMultiDeviceSync:
 
     def test_device_deletes_while_other_syncs(self, fresh_server):
         """Item deleted on server shouldn't come back when another device syncs it."""
-        import server
-        server._paired_devices.add("phone-1")
-        server._paired_devices.add("phone-2")
+
+        pairing.paired_devices.add("phone-1")
+        pairing.paired_devices.add("phone-2")
         now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
         # Create shared item
@@ -919,7 +914,7 @@ class TestMultiDeviceSync:
     def test_sync_both_sides_complete_same_item(self, fresh_server):
         """Both sides completing same item should keep the latest completion."""
         _pair_device(fresh_server)
-        import server
+
 
         old_time = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S")
         new_time = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -927,11 +922,11 @@ class TestMultiDeviceSync:
         # Server has it completed with old time
         _post_reminder(fresh_server, "Both complete", id="both-comp")
         _complete(fresh_server, "both-comp")
-        data = server._load_data()
+        data = data_mod.load_data()
         for c in data["completed"]:
             if c["id"] == "both-comp":
                 c["completed_at"] = old_time
-        server._save_data(data)
+        data_mod.save_data(data)
 
         # Phone also has it completed with newer time
         resp = fresh_server.post("/api/sync", json={
@@ -1038,11 +1033,11 @@ class TestStateTransitions:
 class TestPairingEdgeCases:
     def test_max_paired_devices(self, fresh_server):
         """Should reject pairing beyond MAX_PAIRED_DEVICES."""
-        import server
-        server._pair_attempts = 0
-        server._pair_attempt_reset = None
+
+        pairing._pair_attempts = 0
+        pairing._pair_attempt_reset = None
         for i in range(10):
-            server._paired_devices.add(f"device-{i}")
+            pairing.paired_devices.add(f"device-{i}")
         code = fresh_server.post("/api/pair/generate").get_json()["code"]
         resp = fresh_server.post("/api/pair/validate", json={
             "code": code, "device_id": "device-11"
@@ -1051,11 +1046,11 @@ class TestPairingEdgeCases:
 
     def test_re_pair_existing_device(self, fresh_server):
         """Re-pairing an already paired device should succeed."""
-        import server
-        server._pair_attempts = 0
-        server._pair_attempt_reset = None
+
+        pairing._pair_attempts = 0
+        pairing._pair_attempt_reset = None
         for i in range(10):
-            server._paired_devices.add(f"device-{i}")
+            pairing.paired_devices.add(f"device-{i}")
         code = fresh_server.post("/api/pair/generate").get_json()["code"]
         resp = fresh_server.post("/api/pair/validate", json={
             "code": code, "device_id": "device-0"
@@ -1064,9 +1059,9 @@ class TestPairingEdgeCases:
 
     def test_pairing_code_single_use(self, fresh_server):
         """Code should only work once."""
-        import server
-        server._pair_attempts = 0
-        server._pair_attempt_reset = None
+
+        pairing._pair_attempts = 0
+        pairing._pair_attempt_reset = None
         code = fresh_server.post("/api/pair/generate").get_json()["code"]
         fresh_server.post("/api/pair/validate", json={"code": code})
         # Second attempt with same code — no active code
@@ -1075,9 +1070,9 @@ class TestPairingEdgeCases:
 
     def test_generate_replaces_previous_code(self, fresh_server):
         """Generating a new code should invalidate the old one."""
-        import server
-        server._pair_attempts = 0
-        server._pair_attempt_reset = None
+
+        pairing._pair_attempts = 0
+        pairing._pair_attempt_reset = None
         code1 = fresh_server.post("/api/pair/generate").get_json()["code"]
         code2 = fresh_server.post("/api/pair/generate").get_json()["code"]
         if code1 != code2:
