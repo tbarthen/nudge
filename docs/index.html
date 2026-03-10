@@ -494,6 +494,22 @@ header .subtitle {
   color: var(--text-muted);
 }
 
+/* Archived items */
+.archived-toggle {
+  text-align: center;
+  padding: 10px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.archived-item {
+  padding: 10px 16px;
+  color: var(--text-muted);
+  opacity: 0.5;
+  text-decoration: line-through;
+  font-size: 0.95rem;
+}
+
 /* Settings panel */
 .settings-overlay {
   position: fixed;
@@ -1027,18 +1043,23 @@ function isSafeId(id) {
 }
 
 // -- Reminders --
+let _showArchived = false;
+
 async function loadReminders() {
   const list = document.getElementById('reminderList');
-  let reminders;
+  let allItems, reminders, archived;
   try {
-    reminders = await idbGetAll('reminders');
-    reminders = reminders.filter(r => isSafeId(r.id) && r.text && typeof r.text === 'string' && !r.hidden);
+    allItems = (await idbGetAll('reminders')).filter(r => isSafeId(r.id) && r.text && typeof r.text === 'string');
+    reminders = allItems.filter(r => !r.hidden);
+    archived = allItems.filter(r => r.hidden);
     reminders.sort((a, b) => (b.order || 0) - (a.order || 0));
+    archived.sort((a, b) => (b.hidden_at || '').localeCompare(a.hidden_at || ''));
   } catch (_) {
     reminders = [];
+    archived = [];
   }
 
-  if (reminders.length === 0) {
+  if (reminders.length === 0 && archived.length === 0) {
     list.innerHTML = '<div class="empty-state"><div class="emoji">&#128170;</div><p>No reminders yet. Add one above!<br><span style="font-size:0.8rem;color:var(--text-muted)">e.g. "Eat spaghetti with hand tied behind back"</span></p></div>';
     return;
   }
@@ -1046,7 +1067,7 @@ async function loadReminders() {
   // Preserve selection state across reloads
   const prevSelected = new Set(selectedIds);
 
-  list.innerHTML = reminders.map((r, idx) => {
+  let html = reminders.map((r, idx) => {
     const safeId = escapeAttr(r.id);
     return `
     <div class="swipe-wrapper" data-id="${safeId}">
@@ -1067,6 +1088,19 @@ async function loadReminders() {
     </div>`;
   }).join('');
 
+  if (archived.length > 0) {
+    const label = _showArchived
+      ? `Hide archived (${archived.length})`
+      : `Show archived (${archived.length})`;
+    html += `<div class="archived-toggle" onclick="toggleArchived()">${label}</div>`;
+    if (_showArchived) {
+      html += archived.map(r => `
+        <div class="archived-item">${escapeHtml(r.text)}</div>`).join('');
+    }
+  }
+
+  list.innerHTML = html;
+
   // Restore selection state if in select mode
   if (selectMode && prevSelected.size > 0) {
     selectedIds.clear();
@@ -1079,6 +1113,11 @@ async function loadReminders() {
 
   initDragAndDrop();
   initSwipe();
+}
+
+function toggleArchived() {
+  _showArchived = !_showArchived;
+  loadReminders();
 }
 
 async function addReminder(e) {
