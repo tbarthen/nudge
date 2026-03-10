@@ -2191,8 +2191,13 @@ async function initialServerSync() {
       api('/api/reminders'),
       api('/api/completed'),
     ]);
+    // Preserve locally-hidden items: if the async DELETE hasn't reached the
+    // server yet, the item would come back without the hidden flag.  Collect
+    // hidden IDs before the clear so we can exclude them from the server data.
+    const localReminders = await idbGetAll('reminders');
+    const hiddenIds = new Set(localReminders.filter(r => r.hidden).map(r => r.id));
     // Server is reachable — use its data as the source of truth for initial load
-    await idbPutAll('reminders', reminders.filter(r => isSafeId(r.id)));
+    await idbPutAll('reminders', reminders.filter(r => isSafeId(r.id) && !hiddenIds.has(r.id)));
     await idbPutAll('completed', completed.filter(c => isSafeId(c.id)));
   } catch (e) { /* standalone mode — no server, IDB is source of truth */ }
 }
@@ -2488,9 +2493,10 @@ async function syncNow() {
 
     const merged = await res.json();
 
-    // Update IndexedDB with merged data (filter unsafe IDs)
+    // Update IndexedDB with merged data (filter unsafe IDs and server-deleted IDs)
+    const serverDeletedIds = new Set(merged.deleted_ids || []);
     await Promise.all([
-      idbPutAll('reminders', (merged.reminders || []).filter(r => isSafeId(r.id))),
+      idbPutAll('reminders', (merged.reminders || []).filter(r => isSafeId(r.id) && !serverDeletedIds.has(r.id))),
       idbPutAll('completed', (merged.completed || []).filter(c => isSafeId(c.id))),
     ]);
 
