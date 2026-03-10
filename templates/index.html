@@ -2517,8 +2517,18 @@ async function syncNow() {
     const merged = await res.json();
 
     // Update IndexedDB with merged data (filter unsafe IDs)
+    // Preserve local hidden state — server doesn't know about soft-deletes
+    const localReminders = await idbGetAll('reminders');
+    const hiddenMap = {};
+    localReminders.forEach(r => {
+      if (r.hidden) hiddenMap[r.id] = { hidden: r.hidden, hidden_at: r.hidden_at };
+    });
+    const mergedReminders = (merged.reminders || []).filter(r => isSafeId(r.id)).map(r => {
+      if (hiddenMap[r.id]) { r.hidden = hiddenMap[r.id].hidden; r.hidden_at = hiddenMap[r.id].hidden_at; }
+      return r;
+    });
     await Promise.all([
-      idbPutAll('reminders', (merged.reminders || []).filter(r => isSafeId(r.id))),
+      idbPutAll('reminders', mergedReminders),
       idbPutAll('completed', (merged.completed || []).filter(c => isSafeId(c.id))),
     ]);
 
