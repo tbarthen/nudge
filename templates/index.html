@@ -263,10 +263,54 @@ header .subtitle {
 
 .reminder-item.drag-over {
   margin-top: 52px;
+  position: relative;
+}
+
+.reminder-item.drag-over::before {
+  content: 'Drop here';
+  position: absolute;
+  top: -48px;
+  left: 0;
+  right: 0;
+  height: 42px;
+  border: 2px dashed var(--accent);
+  border-radius: 10px;
+  background: rgba(233, 69, 96, 0.08);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  box-shadow: 0 0 12px rgba(233, 69, 96, 0.15);
 }
 
 .reminder-item.drag-over-bottom {
   margin-bottom: 52px;
+  position: relative;
+}
+
+.reminder-item.drag-over-bottom::after {
+  content: 'Drop here';
+  position: absolute;
+  bottom: -48px;
+  left: 0;
+  right: 0;
+  height: 42px;
+  border: 2px dashed var(--accent);
+  border-radius: 10px;
+  background: rgba(233, 69, 96, 0.08);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  box-shadow: 0 0 12px rgba(233, 69, 96, 0.15);
 }
 
 .reminder-list {
@@ -988,7 +1032,7 @@ async function loadReminders() {
   let reminders;
   try {
     reminders = await idbGetAll('reminders');
-    reminders = reminders.filter(r => isSafeId(r.id) && r.text && typeof r.text === 'string');
+    reminders = reminders.filter(r => isSafeId(r.id) && r.text && typeof r.text === 'string' && !r.hidden);
     reminders.sort((a, b) => (b.order || 0) - (a.order || 0));
   } catch (_) {
     reminders = [];
@@ -1070,7 +1114,13 @@ async function completeReminder(id) {
 }
 
 async function deleteReminder(id) {
-  await idbDelete('reminders', id);
+  const item = await idbGet('reminders', id);
+  if (item) {
+    item.hidden = true;
+    item.hidden_at = new Date().toISOString();
+    item.updated_at = new Date().toISOString();
+    await idbPut('reminders', item);
+  }
   loadReminders();
   apiQuiet(`/api/reminders/${id}`, 'DELETE');
 }
@@ -1430,11 +1480,18 @@ async function batchComplete() {
 async function batchDelete() {
   const ids = [...selectedIds];
   if (ids.length === 0) return;
-  const ok = confirm(`Permanently delete ${ids.length} reminder${ids.length === 1 ? '' : 's'}?\n\nThis cannot be undone.`);
+  const ok = confirm(`Delete ${ids.length} reminder${ids.length === 1 ? '' : 's'}?`);
   if (!ok) return;
   exitSelectMode();
+  const now = new Date().toISOString();
   for (const id of ids) {
-    await idbDelete('reminders', id);
+    const item = await idbGet('reminders', id);
+    if (item) {
+      item.hidden = true;
+      item.hidden_at = now;
+      item.updated_at = now;
+      await idbPut('reminders', item);
+    }
   }
   loadReminders();
   apiQuiet('/api/reminders/batch-delete', 'POST', ids);
@@ -1515,16 +1572,25 @@ async function undoAction() {
     }
     apiQuiet(`/api/completed/${undoData.id}/uncomplete`, 'PATCH');
   } else {
-    // Re-create the reminder with original ID to prevent sync duplicates
-    const restored = {
-      id: undoData.reminder.id || generateId(),
-      text: undoData.text,
-      created_at: undoData.reminder.created_at || new Date().toISOString(),
-      completed_at: null,
-      order: undoData.reminder.order || 0,
-    };
-    await idbPut('reminders', restored);
-    apiQuiet('/api/reminders', 'POST', restored);
+    // Un-hide the soft-deleted reminder
+    const existing = await idbGet('reminders', undoData.reminder.id);
+    if (existing) {
+      delete existing.hidden;
+      delete existing.hidden_at;
+      existing.updated_at = new Date().toISOString();
+      await idbPut('reminders', existing);
+    } else {
+      // Fallback: re-create if somehow missing
+      const restored = {
+        id: undoData.reminder.id || generateId(),
+        text: undoData.text,
+        created_at: undoData.reminder.created_at || new Date().toISOString(),
+        completed_at: null,
+        order: undoData.reminder.order || 0,
+      };
+      await idbPut('reminders', restored);
+    }
+    apiQuiet('/api/reminders', 'POST', { id: undoData.reminder.id, text: undoData.text });
   }
   undoData = null;
   loadReminders();
@@ -1643,7 +1709,13 @@ function initSwipe() {
         item.style.transform = `translateX(-${window.innerWidth}px)`;
         const reminderData = { id, text };
         setTimeout(async () => {
-          await idbDelete('reminders', id);
+          const idbItem = await idbGet('reminders', id);
+          if (idbItem) {
+            idbItem.hidden = true;
+            idbItem.hidden_at = new Date().toISOString();
+            idbItem.updated_at = new Date().toISOString();
+            await idbPut('reminders', idbItem);
+          }
           showUndo('delete', text, reminderData);
           loadReminders();
           apiQuiet(`/api/reminders/${id}`, 'DELETE');

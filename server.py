@@ -81,6 +81,11 @@ def _sanitize_item(item, allow_completed=False):
         safe["updated_at"] = ts
     if isinstance(item.get("deletion_flagged"), bool):
         safe["deletion_flagged"] = item["deletion_flagged"]
+    if isinstance(item.get("hidden"), bool):
+        safe["hidden"] = item["hidden"]
+    ht = _clamp_timestamp(item.get("hidden_at"))
+    if ht:
+        safe["hidden_at"] = ht
     return safe
 
 
@@ -676,12 +681,19 @@ def sync_data():
                 s_time = s.get("updated_at", s.get("created_at", ""))
                 p_time = p.get("updated_at", p.get("created_at", ""))
                 if p_time > s_time:
-                    merged_reminders.append(p)
+                    winner = dict(p)
                 else:
-                    merged_reminders.append(s)
+                    winner = dict(s)
+                # hidden is sticky: if either side hid it, keep it hidden
+                if s.get("hidden") or p.get("hidden"):
+                    winner["hidden"] = True
+                    winner["hidden_at"] = max(
+                        s.get("hidden_at", ""), p.get("hidden_at", "")
+                    ) or None
+                merged_reminders.append(winner)
                 continue
 
-            # Only on one side as active — keep it
+            # Only on one side as active — keep it (preserve hidden flag)
             if in_s_rem:
                 merged_reminders.append(s_rem[item_id])
             elif in_p_rem:
