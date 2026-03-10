@@ -90,12 +90,17 @@ def _sanitize_item(item, allow_completed=False):
 
 
 def _load_data():
+    defaults = {"config": {"popup_interval_minutes": 60, "server_port": 5123, "start_with_windows": False, "completed_retention_days": 60, "auto_refresh_seconds": 90}, "reminders": [], "completed": []}
     try:
         with open(DATA_FILE, "r") as f:
-            return json.load(f)
+            data = json.load(f)
+        # Ensure all required keys exist (handles partial/corrupted files)
+        for key in defaults:
+            if key not in data:
+                data[key] = defaults[key]
+        return data
     except (json.JSONDecodeError, FileNotFoundError):
-        # Corrupted or missing — return safe defaults
-        return {"config": {"popup_interval_minutes": 60, "server_port": 5123, "start_with_windows": False, "completed_retention_days": 60, "auto_refresh_seconds": 90}, "reminders": [], "completed": []}
+        return defaults
 
 
 def _get_retention_days(data=None):
@@ -217,7 +222,7 @@ def get_reminders():
 @app.route("/api/reminders", methods=["POST"])
 def add_reminder():
     body = request.get_json(silent=True)
-    if not body:
+    if not body or not isinstance(body, dict):
         return jsonify({"error": "invalid JSON body"}), 400
     text = str(body.get("text", "")).strip()[:500]
     if not text:
@@ -707,7 +712,7 @@ def sync_data():
         # Prune completed by retention
         retention = _get_retention_days(data)
         cutoff = (datetime.now() - timedelta(days=retention)).isoformat()
-        merged_completed = [c for c in merged_completed if c.get("completed_at", "") >= cutoff]
+        merged_completed = [c for c in merged_completed if (c.get("completed_at") or "") >= cutoff]
 
         data["reminders"] = merged_reminders
         data["completed"] = merged_completed
