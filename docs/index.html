@@ -614,7 +614,6 @@ header .subtitle {
 .archived-item {
   opacity: 0.5;
   text-decoration: line-through;
-  pointer-events: none;
   padding: 10px 16px;
 }
 
@@ -1282,12 +1281,21 @@ async function loadArchived() {
 
   let html = '';
   archivedReminders.forEach(r => {
-    html += `<div class="reminder-item archived-item"><span class="text">${escapeHtml(r.text)}</span></div>`;
+    const safeId = escapeAttr(r.id);
+    html += `<div class="swipe-wrapper archived-swipe" data-id="${safeId}" data-type="reminder">
+      <div class="swipe-bg swipe-bg-complete" style="display:none">&#8617; Restore</div>
+      <div class="reminder-item archived-item"><span class="text">${escapeHtml(r.text)}</span></div>
+    </div>`;
   });
   archivedCompleted.forEach(c => {
-    html += `<div class="reminder-item archived-item"><span class="text">${escapeHtml(c.text)}</span><span class="time" style="opacity:0.5">${formatTime(c.completed_at)}</span></div>`;
+    const safeId = escapeAttr(c.id);
+    html += `<div class="swipe-wrapper archived-swipe" data-id="${safeId}" data-type="completed">
+      <div class="swipe-bg swipe-bg-complete" style="display:none">&#8617; Restore</div>
+      <div class="reminder-item archived-item"><span class="text">${escapeHtml(c.text)}</span><span class="time" style="opacity:0.5">${formatTime(c.completed_at)}</span></div>
+    </div>`;
   });
   list.innerHTML = html;
+  initArchivedSwipe();
 }
 
 function toggleArchived() {
@@ -1302,6 +1310,78 @@ function toggleArchived() {
   } else {
     toggle.textContent = 'Hide archived';
   }
+}
+
+function initArchivedSwipe() {
+  const wrappers = document.querySelectorAll('.archived-swipe');
+  wrappers.forEach(wrapper => {
+    const item = wrapper.querySelector('.archived-item');
+    const bg = wrapper.querySelector('.swipe-bg-complete');
+    let startX = 0, startY = 0, currentX = 0, swiping = false;
+    let directionLocked = false, isHorizontal = false;
+    const LOCK_THRESHOLD = 10;
+
+    item.addEventListener('touchstart', e => {
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      currentX = 0; swiping = true;
+      directionLocked = false; isHorizontal = false;
+      item.classList.remove('snapping', 'dismissing');
+    }, { passive: true });
+
+    item.addEventListener('touchmove', e => {
+      if (!swiping) return;
+      const dx = e.touches[0].clientX - startX;
+      const dy = e.touches[0].clientY - startY;
+      if (!directionLocked) {
+        if (Math.abs(dx) < LOCK_THRESHOLD && Math.abs(dy) < LOCK_THRESHOLD) return;
+        directionLocked = true;
+        isHorizontal = Math.abs(dx) > Math.abs(dy);
+        if (isHorizontal) item.classList.add('swiping');
+      }
+      if (!isHorizontal) return;
+      currentX = Math.max(0, dx); // Only allow swipe right
+      if (currentX > 0) bg.style.display = 'flex';
+      item.style.transform = `translateX(${currentX}px)`;
+    }, { passive: true });
+
+    item.addEventListener('touchend', async () => {
+      if (!swiping) return;
+      swiping = false;
+      item.classList.remove('swiping');
+      if (!isHorizontal) return;
+
+      const id = wrapper.dataset.id;
+      const type = wrapper.dataset.type;
+
+      if (currentX > SWIPE_THRESHOLD) {
+        item.classList.add('dismissing');
+        item.style.transform = `translateX(${window.innerWidth}px)`;
+        setTimeout(async () => {
+          if (type === 'reminder') {
+            const r = await idbGet('reminders', id);
+            if (r) { delete r.hidden; delete r.hidden_at; r.updated_at = new Date().toISOString(); await idbPut('reminders', r); }
+            loadReminders();
+          } else {
+            const c = await idbGet('completed', id);
+            if (c) { delete c.hidden; delete c.hidden_at; await idbPut('completed', c); }
+            loadCompleted();
+          }
+          loadArchived();
+        }, 300);
+      } else {
+        item.classList.add('snapping');
+        item.style.transform = 'translateX(0)';
+        setTimeout(() => { bg.style.display = 'none'; }, 200);
+      }
+    });
+
+    item.addEventListener('touchcancel', () => {
+      swiping = false;
+      item.classList.remove('swiping');
+      if (isHorizontal) { item.classList.add('snapping'); item.style.transform = 'translateX(0)'; }
+    });
+  });
 }
 
 // -- Settings --
