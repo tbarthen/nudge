@@ -1717,6 +1717,7 @@ function initSwipe() {
 
     item.addEventListener('touchstart', e => {
       if (selectMode) return;
+      if (e.target.closest('.drag-handle')) return;
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
       currentX = 0;
@@ -1943,6 +1944,7 @@ async function applyReorder(reorderData) {
 let _sortableInstance = null;
 function initDragAndDrop() {
   if (_sortableInstance) { _sortableInstance.destroy(); _sortableInstance = null; }
+  if (typeof Sortable === 'undefined') return;
   const list = document.getElementById('reminderList');
   if (!list || !list.children.length) return;
 
