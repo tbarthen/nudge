@@ -402,7 +402,7 @@ def sync_data():
                 # Hidden is sticky
                 if s.get("hidden") or p.get("hidden"):
                     winner["hidden"] = True
-                    winner["hidden_at"] = max(s.get("hidden_at", ""), p.get("hidden_at", "")) or None
+                    winner["hidden_at"] = max(s.get("hidden_at") or "", p.get("hidden_at") or "") or None
                 merged_reminders.append(winner)
                 continue
 
