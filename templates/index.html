@@ -1997,6 +1997,8 @@ function initDragAndDrop() {
   let _dropTarget = null;
   let _dropSide = null;
   let _originalRects = [];
+  let _dragStartY = null;
+  const _DRAG_DEAD_ZONE = 10;
 
   function _setDropTarget(target, side) {
     if (target === _dropTarget && side === _dropSide) return;
@@ -2048,6 +2050,7 @@ function initDragAndDrop() {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     if (!dragItem) return;
+    if (_dragStartY !== null && Math.abs(e.clientY - _dragStartY) < _DRAG_DEAD_ZONE) return;
     const overItem = e.target.closest('.reminder-item');
     if (!overItem) {
       const { target, side } = _findDropFromY(e.clientY);
@@ -2095,11 +2098,13 @@ function initDragAndDrop() {
       if (wrapper) wrapper.classList.add('dragging-source');
       document.body.classList.add('dragging-active');
       requestAnimationFrame(() => _captureRects());
+      _dragStartY = e.clientY;
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', item.dataset.id);
     });
 
     item.addEventListener('dragend', () => {
+      _dragStartY = null;
       item.classList.remove('dragging');
       const wrapper = item.closest('.swipe-wrapper');
       if (wrapper) wrapper.classList.remove('dragging-source');
@@ -2116,6 +2121,7 @@ function initDragAndDrop() {
       e.stopPropagation();
       e.dataTransfer.dropEffect = 'move';
       if (item !== dragItem) {
+        if (_dragStartY !== null && Math.abs(e.clientY - _dragStartY) < _DRAG_DEAD_ZONE) return;
         const { target, side } = _findDropFromY(e.clientY);
         if (target) _setDropTarget(target, side);
       }
