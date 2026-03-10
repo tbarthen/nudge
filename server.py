@@ -179,9 +179,11 @@ def reorder_reminders():
                 if not is_safe_id(item_id):
                     continue
                 order_map[item_id] = safe_int(item["order"])
+        now = datetime.now().isoformat()
         for r in data["reminders"]:
             if r["id"] in order_map:
                 r["order"] = order_map[r["id"]]
+                r["updated_at"] = now
         save_data(data)
     reminders = sorted(data["reminders"], key=lambda r: -r.get("order", 0))
     return jsonify(reminders)
