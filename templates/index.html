@@ -277,6 +277,11 @@ body:not(.sortable-dragging) .reminder-item:hover { background: var(--surface); 
   display: none;
 }
 
+.reminder-item:has(.edit-input.active) .drag-handle {
+  pointer-events: none;
+  opacity: 0.3;
+}
+
 .reminder-item .edit-input {
   flex: 1;
   padding: 6px 10px;
