@@ -26,10 +26,12 @@ def _get_config():
 
 
 def _get_port():
+    """Get the server port from config."""
     return _get_config().get("server_port", 5123)
 
 
 def _get_interval():
+    """Get the popup interval in minutes from config, minimum 1."""
     val = _get_config().get("popup_interval_minutes", 60)
     return max(1, int(val)) if isinstance(val, (int, float)) else 60
 
@@ -72,24 +74,24 @@ def generate_icon(force=False):
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Notepad body — fills most of the canvas, leaving room for checkmark overlap
+    # Notepad body
     pad_left, pad_top, pad_right, pad_bottom = 2, 2, 52, 62
     draw.rounded_rectangle([pad_left, pad_top, pad_right, pad_bottom], radius=5, fill="#f5f0e8", outline="#bbb5a5", width=2)
 
-    # Notepad top spiral binding — small circles along the top
+    # Spiral binding along top
     for cx in range(10, 50, 8):
         draw.ellipse([cx - 2, pad_top - 2, cx + 2, pad_top + 2], fill="#999")
 
-    # Ruled lines on the notepad
+    # Ruled lines
     for ly in range(16, 58, 8):
         draw.line([(pad_left + 5, ly), (pad_right - 5, ly)], fill="#c5c0b5", width=1)
 
-    # Green checkmark circle in bottom-right — bigger and bolder
+    # Green checkmark circle (bottom-right)
     check_cx, check_cy, check_r = 46, 46, 18
     draw.ellipse([check_cx - check_r, check_cy - check_r, check_cx + check_r, check_cy + check_r],
                  fill="#2ecc71", outline="#1fa85a", width=2)
 
-    # Checkmark stroke — thicker white lines
+    # Checkmark stroke
     draw.line([(36, 46), (44, 54)], fill="white", width=4)
     draw.line([(44, 54), (56, 38)], fill="white", width=4)
 
@@ -108,7 +110,6 @@ def _timer_loop(stop_event):
         interval_min = _get_interval()
         port = _get_port()
 
-        # Sleep in small increments so we can respond to stop_event and config changes
         slept = 0
         while slept < interval_min * 60 and not stop_event.is_set():
             time.sleep(5)
@@ -117,17 +118,14 @@ def _timer_loop(stop_event):
         if stop_event.is_set():
             break
 
-        # Check idle — if idle longer than interval, skip (will fire on next active check)
         idle_sec = _get_idle_seconds()
         interval_sec = _get_interval() * 60
         if idle_sec > interval_sec:
-            # User is away — wait for them to come back
             while _get_idle_seconds() > 30 and not stop_event.is_set():
                 time.sleep(5)
             if stop_event.is_set():
                 break
 
-        # Only show popup if there are active reminders
         port = _get_port()
         if _has_active_reminders(port):
             if not popup.popup_visible:
@@ -141,7 +139,6 @@ def _pair_phone(port):
     import io
 
     def do_pair():
-        # Generate code via API
         try:
             url = f"http://localhost:{port}/api/pair/generate"
             req = urllib.request.Request(url, method="POST", data=b"")
@@ -154,10 +151,8 @@ def _pair_phone(port):
             code = "Error"
             local_ip = "?"
 
-        # Build URL that auto-pairs when opened
         pair_url = f"https://tbarthen.github.io/nudge/?server={local_ip}:{port}&code={code}"
 
-        # Generate QR code image
         qr = qrcode.QRCode(box_size=6, border=2)
         qr.add_data(pair_url)
         qr.make(fit=True)
@@ -178,11 +173,10 @@ def _pair_phone(port):
         tk.Label(win, text="Scan to pair phone", font=("Segoe UI", 14, "bold"),
                  bg=popup.BG, fg=popup.ACCENT).pack(pady=(16, 8))
 
-        # Display QR code
         from PIL import ImageTk
         tk_img = ImageTk.PhotoImage(qr_img)
         qr_label = tk.Label(win, image=tk_img, bg=popup.BG)
-        qr_label.image = tk_img  # prevent garbage collection
+        qr_label.image = tk_img  # prevent GC
         qr_label.pack(pady=(0, 4))
 
         tk.Label(win, text="Expires in 5 minutes",
@@ -265,7 +259,6 @@ def _show_settings(port):
         w, h = 340, 340
         win.geometry(f"{w}x{h}+{(screen_w - w) // 2}+{(screen_h - h) // 2}")
 
-        # Draggable title bar
         title_frame = tk.Frame(win, bg=popup.ACCENT, height=36)
         title_frame.pack(fill="x")
         title_frame.pack_propagate(False)
@@ -288,7 +281,6 @@ def _show_settings(port):
         row_font = ("Segoe UI", 10)
         label_fg = "#8a8aaa"
 
-        # Popup interval
         tk.Label(body, text="Popup interval", font=row_font, bg=popup.BG, fg=label_fg,
                  anchor="w").pack(fill="x", pady=(0, 2))
         interval_frame = tk.Frame(body, bg=popup.BG)
@@ -303,7 +295,6 @@ def _show_settings(port):
                            activeforeground=popup.FG, anchor="w",
                            highlightthickness=0, bd=0).pack(anchor="w")
 
-        # Auto-refresh
         tk.Label(body, text="List auto-refresh", font=row_font, bg=popup.BG, fg=label_fg,
                  anchor="w").pack(fill="x", pady=(0, 2))
         refresh_frame = tk.Frame(body, bg=popup.BG)
@@ -314,7 +305,6 @@ def _show_settings(port):
         refresh_entry.pack(side="left", ipady=2)
         tk.Label(refresh_frame, text="seconds", font=("Segoe UI", 9), bg=popup.BG, fg=label_fg).pack(side="left", padx=6)
 
-        # Completed retention
         tk.Label(body, text="Keep completed items for", font=row_font, bg=popup.BG, fg=label_fg,
                  anchor="w").pack(fill="x", pady=(0, 2))
         ret_frame = tk.Frame(body, bg=popup.BG)
@@ -325,7 +315,6 @@ def _show_settings(port):
         ret_entry.pack(side="left", ipady=2)
         tk.Label(ret_frame, text="days", font=("Segoe UI", 9), bg=popup.BG, fg=label_fg).pack(side="left", padx=6)
 
-        # Start with Windows
         start_var = tk.BooleanVar(value=config.get("start_with_windows", False))
         tk.Checkbutton(body, text="Start with Windows", variable=start_var,
                        font=row_font, bg=popup.BG, fg=popup.FG,
@@ -416,9 +405,7 @@ def run_tray(stop_event=None):
 
     icon = pystray.Icon("nudge", _create_image(), "Nudge — DO IT!!!", menu)
 
-    # Start the timer thread
     timer_thread = threading.Thread(target=_timer_loop, args=(stop_event,), daemon=True)
     timer_thread.start()
 
-    # pystray needs to run on the thread that calls it (preferably main)
     icon.run()

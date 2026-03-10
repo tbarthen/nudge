@@ -37,10 +37,8 @@ def _release_mutex():
 
 
 def main():
-    # Single instance check
+    """Start all Nudge subsystems: Flask server, popup window, and system tray."""
     _acquire_single_instance()
-
-    # Ensure data file exists
     init_data_file()
 
     config = _get_config()
@@ -48,24 +46,20 @@ def main():
 
     stop_event = threading.Event()
 
-    # Start Flask in a daemon thread
     flask_thread = threading.Thread(
         target=lambda: app.run(host="0.0.0.0", port=port, use_reloader=False),
         daemon=True,
     )
     flask_thread.start()
 
-    # Pre-create the popup window (hidden) so clicks are instant
     start_popup_thread()
 
-    # Handle Ctrl+C gracefully
     def sigint_handler(sig, frame):
         stop_event.set()
         sys.exit(0)
 
     signal.signal(signal.SIGINT, sigint_handler)
 
-    # Run tray on main thread (pystray requires it)
     try:
         run_tray(stop_event)
     except KeyboardInterrupt:

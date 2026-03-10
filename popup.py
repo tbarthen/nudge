@@ -6,18 +6,17 @@ import urllib.request
 import json
 import os
 
-# Flag shared with tray.py
-popup_visible = False
+popup_visible = False  # shared with tray.py
 _popup_lock = threading.Lock()
 _root = None
 _initialized = threading.Event()
 _port = 5123
 _auto_hide_id = None
 
-# Persistent cache — survives restarts
 _CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".cached_reminders.json")
 
 def _load_cached_reminders():
+    """Load cached reminders from disk for instant popup display."""
     try:
         with open(_CACHE_FILE, "r") as f:
             data = json.load(f)
@@ -28,6 +27,7 @@ def _load_cached_reminders():
     return []
 
 def _save_cached_reminders(reminders):
+    """Persist cached reminders to disk."""
     try:
         with open(_CACHE_FILE, "w") as f:
             json.dump(reminders, f)
@@ -36,7 +36,6 @@ def _save_cached_reminders(reminders):
 
 _cached_reminders = _load_cached_reminders()
 
-# Colors
 BG = "#1a1a2e"
 FG = "#e0e0e0"
 ACCENT = "#e94560"
@@ -51,6 +50,7 @@ ROW_H = 46  # approximate height per reminder row
 
 
 def _get_taskbar_height():
+    """Get the Windows taskbar height in pixels via Shell API."""
     try:
         from ctypes import wintypes
         class APPBARDATA(ctypes.Structure):
@@ -75,6 +75,7 @@ def _get_taskbar_height():
 
 
 def _fetch_reminders(port):
+    """Fetch active reminders from the local API."""
     try:
         url = f"http://localhost:{port}/api/reminders"
         with urllib.request.urlopen(url, timeout=2) as resp:
@@ -84,6 +85,7 @@ def _fetch_reminders(port):
 
 
 def _api_call(port, path, method="PATCH"):
+    """Make a simple API request with an empty body."""
     try:
         url = f"http://localhost:{port}{path}"
         req = urllib.request.Request(url, method=method, data=b"")
@@ -95,6 +97,7 @@ def _api_call(port, path, method="PATCH"):
 
 
 def _api_put(port, path, body):
+    """Make a PUT request with a JSON body."""
     try:
         url = f"http://localhost:{port}{path}"
         data = json.dumps(body).encode()
@@ -107,6 +110,7 @@ def _api_put(port, path, body):
 
 
 def _api_post(port, path, body):
+    """Make a POST request with a JSON body."""
     try:
         url = f"http://localhost:{port}{path}"
         data = json.dumps(body).encode()
@@ -119,6 +123,7 @@ def _api_post(port, path, body):
 
 
 def _api_delete(port, path):
+    """Make a DELETE request."""
     try:
         url = f"http://localhost:{port}{path}"
         req = urllib.request.Request(url, method="DELETE")
@@ -135,12 +140,10 @@ def _show_undo(action, item_id, item_text):
         return
     undo_frame = root._undo_frame
 
-    # Cancel any previous undo timer
     if undo_frame._undo_timer:
         root.after_cancel(undo_frame._undo_timer)
         undo_frame._undo_timer = None
 
-    # Clear previous contents
     for w in undo_frame.winfo_children():
         w.destroy()
 
@@ -161,7 +164,6 @@ def _show_undo(action, item_id, item_text):
                 if action == "complete":
                     _api_call(port, f"/api/completed/{item_id}/uncomplete", "PATCH")
                 elif action == "delete":
-                    # Re-create the reminder via POST
                     _api_post(port, "/api/reminders", {"text": item_text, "id": item_id})
             finally:
                 undo_frame._undo_in_progress = False
@@ -176,8 +178,6 @@ def _show_undo(action, item_id, item_text):
         undo_frame.pack(side="bottom", fill="x", before=root._canvas)
     except tk.TclError:
         undo_frame.pack(side="bottom", fill="x")
-
-    # Stays visible until user clicks Undo or completes/deletes another item
 
 
 def _dismiss_undo():
@@ -202,9 +202,8 @@ def _init_window():
     root.attributes("-topmost", True)
     root.attributes("-alpha", 0.95)
     root.configure(bg=BG)
-    root.withdraw()  # Start hidden
+    root.withdraw()
 
-    # Position — start with default height, will resize after content loads
     taskbar_h = _get_taskbar_height()
     screen_w = root.winfo_screenwidth()
     screen_h = root.winfo_screenheight()
@@ -213,7 +212,6 @@ def _init_window():
     y = screen_h - default_h - taskbar_h - 8
     root.geometry(f"{WIN_W}x{default_h}+{x}+{y}")
 
-    # Title bar
     title_frame = tk.Frame(root, bg=ACCENT, height=44)
     title_frame.pack(fill="x")
     title_frame.pack_propagate(False)
@@ -226,7 +224,6 @@ def _init_window():
                           cursor="hand2", command=_hide_popup)
     close_btn.pack(side="right", padx=8, pady=6)
 
-    # Draggable title bar
     def start_drag(e):
         root._drag_x = e.x
         root._drag_y = e.y
@@ -239,7 +236,6 @@ def _init_window():
     title_frame.bind("<Button-1>", start_drag)
     title_frame.bind("<B1-Motion>", do_drag)
 
-    # Add reminder input bar
     add_frame = tk.Frame(root, bg=BG, pady=6, padx=8)
     add_frame.pack(fill="x")
 
@@ -290,20 +286,16 @@ def _init_window():
                         bd=0, width=3, cursor="hand2", command=on_add_submit)
     add_btn.pack(side="right")
 
-    # Refresh indicator (thin bar below add input, above list)
     refresh_label = tk.Label(root, text="\u2022 syncing...", font=("Segoe UI", 8),
                              bg=BG, fg="#555577", anchor="w")
     root._refresh_label = refresh_label
-    # Not packed yet — shown/hidden dynamically
 
-    # Scrollable content area
     canvas = tk.Canvas(root, bg=BG, highlightthickness=0)
     scrollbar = tk.Scrollbar(root, orient="vertical", command=canvas.yview)
     content_frame = tk.Frame(canvas, bg=BG)
 
     def _on_content_configure(e):
         canvas.configure(scrollregion=canvas.bbox("all"))
-        # Show scrollbar only when content exceeds visible area
         content_height = content_frame.winfo_reqheight()
         canvas_height = canvas.winfo_height()
         if content_height > canvas_height and canvas_height > 1:
@@ -318,36 +310,30 @@ def _init_window():
     canvas.create_window((0, 0), window=content_frame, anchor="nw", width=WIN_W - 16)
     canvas.configure(yscrollcommand=scrollbar.set)
 
-    # Don't pack scrollbar by default — it will show dynamically when needed
     canvas.pack(side="left", fill="both", expand=True, padx=(4, 0), pady=4)
 
-    # Undo bar (hidden by default, shown after complete/delete)
     undo_frame = tk.Frame(root, bg="#2a2a4a", height=36)
     undo_frame._undo_timer = None
     undo_frame._undo_in_progress = False
     root._undo_frame = undo_frame
-    # Not packed — shown dynamically
 
     def on_mousewheel(e):
         if content_frame.winfo_reqheight() > canvas.winfo_height():
             canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
     canvas.bind_all("<MouseWheel>", on_mousewheel)
 
-    # Cache fonts so we don't leak Font objects on every rebuild
     root._font_done = tkfont.Font(root=root, family="Segoe UI", size=18, weight="bold")
     root._font_item = tkfont.Font(root=root, family="Segoe UI", size=11)
     root._font_btn = tkfont.Font(root=root, family="Segoe UI", size=10)
     root._font_handle = tkfont.Font(root=root, family="Segoe UI", size=11)
 
-    # Drag-and-drop state
-    root._drag_item = None       # index of item being dragged
-    root._drag_float = None      # floating label widget
-    root._drag_rows = []         # list of row frames (in display order)
-    root._drag_reminders = []    # reminders list for reorder
-    root._drag_target = None     # index of current drop target
-    root._drag_indicator = None  # visual drop indicator line
+    root._drag_item = None
+    root._drag_float = None
+    root._drag_rows = []
+    root._drag_reminders = []
+    root._drag_target = None
+    root._drag_indicator = None
 
-    # Store references for rebuild
     root._content_frame = content_frame
     root._canvas = canvas
 
@@ -370,11 +356,10 @@ def _resize_to_fit(num_items):
     max_h = int(screen_h * WIN_H_MAX_RATIO)
 
     if num_items == 0:
-        content_h = CHROME_H + 100  # "You DID it!!!" message
+        content_h = CHROME_H + 100
     else:
         content_h = CHROME_H + num_items * ROW_H
 
-    # Use whichever is larger: the content size or the default size
     win_h = min(max(content_h, default_h), max_h)
     x = screen_w - WIN_W - 16
     y = screen_h - win_h - taskbar_h - 8
@@ -382,6 +367,7 @@ def _resize_to_fit(num_items):
 
 
 def _hide_popup():
+    """Hide the popup window and stop auto-refresh."""
     global popup_visible, _auto_refresh_id
     with _popup_lock:
         popup_visible = False
@@ -401,11 +387,9 @@ def _rebuild_list():
 
     port = _port
 
-    # Show cached data immediately (no flash)
     if _cached_reminders:
         _populate_list(_cached_reminders, is_cache=True)
 
-    # Show sync indicator
     try:
         root._refresh_label.pack(fill="x", padx=12, before=root._canvas)
     except tk.TclError:
@@ -425,10 +409,8 @@ def _on_fresh_data(reminders):
     if not root:
         return
 
-    # Hide sync indicator
     root._refresh_label.pack_forget()
 
-    # Only re-render if data actually changed
     if reminders != _cached_reminders:
         _cached_reminders = reminders
         _save_cached_reminders(reminders)
@@ -446,7 +428,6 @@ def _drag_start(event, idx):
     row = root._drag_rows[idx]
     reminder = root._drag_reminders[idx]
 
-    # Create floating label that follows the cursor
     text = reminder["text"]
     if len(text) > 50:
         text = text[:47] + "..."
@@ -456,7 +437,6 @@ def _drag_start(event, idx):
                       y=event.y_root - root.winfo_rooty() - 15)
     root._drag_float = float_label
 
-    # Dim the source row
     row.configure(bg="#0d1a30")
     for child in row.winfo_children():
         try:
@@ -471,17 +451,14 @@ def _drag_motion(event):
     if root._drag_item is None or not root._drag_float:
         return
 
-    # Move floating label
     rx = event.x_root - root.winfo_rootx()
     ry = event.y_root - root.winfo_rooty() - 15
     root._drag_float.place(x=rx, y=ry)
 
-    # Determine which row we're over
     canvas = root._canvas
     content_frame = root._content_frame
     rows = root._drag_rows
 
-    # Clean up previous indicator
     if root._drag_indicator:
         root._drag_indicator.place_forget()
         root._drag_indicator = None
@@ -492,7 +469,6 @@ def _drag_motion(event):
             ry_row = row.winfo_rooty()
             rh = row.winfo_height()
             if event.y_root >= ry_row and event.y_root < ry_row + rh:
-                # Decide if inserting above or below midpoint
                 mid = ry_row + rh // 2
                 if event.y_root < mid:
                     target_idx = i
@@ -502,7 +478,6 @@ def _drag_motion(event):
         except tk.TclError:
             continue
 
-    # If cursor is below the last row, target the end
     if target_idx is None and rows:
         try:
             last_row = rows[-1]
@@ -514,10 +489,8 @@ def _drag_motion(event):
 
     if target_idx is not None and target_idx != root._drag_item and target_idx != root._drag_item + 1:
         root._drag_target = target_idx
-        # Show a colored line at the insertion point
         if root._drag_indicator is None:
             root._drag_indicator = tk.Frame(root, bg=ACCENT, height=3)
-        # Position the indicator
         try:
             if target_idx < len(rows):
                 ref_row = rows[target_idx]
@@ -543,7 +516,6 @@ def _drag_end(event):
     drag_idx = root._drag_item
     target_idx = root._drag_target
 
-    # Clean up visuals
     if root._drag_float:
         root._drag_float.destroy()
         root._drag_float = None
@@ -551,7 +523,6 @@ def _drag_end(event):
         root._drag_indicator.place_forget()
         root._drag_indicator = None
 
-    # Restore source row color
     if drag_idx is not None and drag_idx < len(root._drag_rows):
         row = root._drag_rows[drag_idx]
         try:
@@ -579,14 +550,12 @@ def _drag_end(event):
         root._drag_target = None
         return
 
-    # Build new order: remove dragged item, insert at target
     ordered = list(reminders)
     item = ordered.pop(drag_idx)
     if target_idx > drag_idx:
         target_idx -= 1
     ordered.insert(target_idx, item)
 
-    # Assign new order values (highest = first displayed)
     reorder_payload = []
     for i, r in enumerate(ordered):
         new_order = len(ordered) - 1 - i
@@ -596,13 +565,11 @@ def _drag_end(event):
     root._drag_item = None
     root._drag_target = None
 
-    # Optimistic update — re-render immediately with new order
     global _cached_reminders
     _cached_reminders = ordered
     _save_cached_reminders(ordered)
     _populate_list(ordered, is_cache=False)
 
-    # Sync to server in background (no rebuild needed on success)
     port = _port
     def bg():
         _api_post(port, "/api/reminders/reorder", reorder_payload)
@@ -616,16 +583,12 @@ def _animate_remove(row, on_done):
         on_done()
         return
 
-    # BG color as RGB tuple for interpolation target
-    # BG = "#1a1a2e" -> (26, 26, 46)
     bg_r, bg_g, bg_b = 26, 26, 46
-    # Start color: reddish tint to signal removal
     start_r, start_g, start_b = 60, 24, 30
 
     steps = 6
     delay = 50
 
-    # Step 0: instantly dim row with red tint, grey out text and hide buttons
     def _apply_to_children(bg_hex, fg_hex):
         for child in row.winfo_children():
             try:
@@ -681,7 +644,6 @@ def _populate_list(reminders, is_cache=False):
 
     if not reminders:
         if is_cache:
-            # Don't act on empty cache — wait for fresh data
             return
         global _auto_hide_id
         _resize_to_fit(0)
@@ -697,7 +659,6 @@ def _populate_list(reminders, is_cache=False):
     btn_font = root._font_btn
     handle_font = root._font_handle
 
-    # Reset drag state
     root._drag_rows = []
     root._drag_reminders = list(reminders)
     root._drag_item = None
@@ -709,7 +670,6 @@ def _populate_list(reminders, is_cache=False):
         row.pack(fill="x", pady=3, padx=4)
         root._drag_rows.append(row)
 
-        # Drag handle (visual indicator only)
         handle = tk.Label(row, text="\u2630", font=handle_font, bg=CARD_BG, fg="#666688",
                           padx=2)
         handle.pack(side="left", padx=(0, 6))
@@ -718,7 +678,6 @@ def _populate_list(reminders, is_cache=False):
                  bg=CARD_BG, fg=FG, anchor="w", wraplength=390, justify="left")
         text_label.pack(side="left", fill="x", expand=True)
 
-        # Bind drag events to entire row and its children
         def make_drag_start(i):
             def handler(e):
                 _drag_start(e, i)
@@ -783,6 +742,7 @@ def _populate_list(reminders, is_cache=False):
 
 
 def _show_edit_dialog(parent, port, r_id, current_text):
+    """Show a modal dialog for editing a reminder's text."""
     if not parent:
         return
     dialog = tk.Toplevel(parent)
@@ -870,10 +830,8 @@ def show_popup(port=5123):
     if not _initialized.is_set():
         start_popup_thread()
 
-    # Show window and refresh content — schedule on the Tk thread
     def do_show():
         global _auto_refresh_id, _auto_hide_id
-        # Cancel any pending auto-hide from a previous "You DID it!!!" state
         if _auto_hide_id:
             _root.after_cancel(_auto_hide_id)
             _auto_hide_id = None
@@ -881,7 +839,6 @@ def show_popup(port=5123):
         _root.lift()
         _root.attributes("-topmost", True)
         _rebuild_list()
-        # Start auto-refresh loop
         if _auto_refresh_id is None:
             _auto_refresh_id = _root.after(_auto_refresh_ms, _auto_refresh)
 
