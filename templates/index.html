@@ -435,25 +435,33 @@ header .subtitle {
 .completed-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   padding: 12px 0;
   cursor: pointer;
   user-select: none;
+  border-radius: 8px;
+  transition: opacity 0.15s;
 }
+
+.completed-header:hover { opacity: 0.8; }
+.completed-header:active { opacity: 0.6; }
 
 .completed-header h2 {
   font-size: 1.3rem;
   color: var(--success);
   font-weight: 800;
+  margin: 0;
 }
 
-.completed-header .arrow {
-  color: var(--text-muted);
-  font-size: 1.2rem;
-  transition: transform 0.2s;
+.completed-header .chevron {
+  color: var(--success);
+  font-size: 0.7rem;
+  transition: transform 0.2s ease;
+  display: inline-flex;
+  align-items: center;
 }
 
-.completed-header .arrow.open { transform: rotate(180deg); }
+.completed-header .chevron.open { transform: rotate(90deg); }
 
 .completed-list {
   display: none;
@@ -865,8 +873,8 @@ body.select-mode .reminder-item[draggable] { draggable: false; }
 
   <div class="completed-section" id="completedSection" style="display:none">
     <div class="completed-header" onclick="toggleCompleted()">
+      <span class="chevron" id="completedChevron">&#9654;</span>
       <h2>You DID it!!!</h2>
-      <span class="arrow" id="completedArrow">&#9660;</span>
     </div>
     <div class="completed-list" id="completedList"></div>
   </div>
@@ -1059,7 +1067,7 @@ async function loadReminders() {
   }
 
   if (reminders.length === 0) {
-    list.innerHTML = '<div class="empty-state"><div class="emoji">&#128170;</div><p>No reminders yet. Add one above!<br><span style="font-size:0.8rem;color:var(--text-muted)">e.g. "Eat spaghetti with hand tied behind back"</span></p></div>';
+    list.innerHTML = '<div class="empty-state"><div class="emoji">&#128170;</div><p>No reminders yet. Add one above!<br><span style="font-size:0.8rem;color:var(--text-muted)">e.g. "Eat spaghetti with hands tied behind back"</span></p></div>';
     return;
   }
 
@@ -1251,9 +1259,9 @@ async function loadCompleted() {
 
 function toggleCompleted() {
   const list = document.getElementById('completedList');
-  const arrow = document.getElementById('completedArrow');
+  const chevron = document.getElementById('completedChevron');
   list.classList.toggle('open');
-  arrow.classList.toggle('open');
+  chevron.classList.toggle('open');
 }
 
 async function loadArchived() {
