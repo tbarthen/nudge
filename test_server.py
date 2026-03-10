@@ -534,6 +534,107 @@ class TestSync:
         item = next(r for r in merged["reminders"] if r["id"] == "hide-1")
         assert item.get("hidden") is True
 
+    def test_sync_hidden_with_null_hidden_at(self, fresh_server):
+        """Sync shouldn't crash when hidden_at is None on one or both sides."""
+        _pair_device(fresh_server)
+        now = datetime.now(timezone.utc).isoformat()
+
+        # Server has item hidden with hidden_at = None (legacy data)
+        _post_reminder(fresh_server, "Legacy hide", id="null-hide-1")
+        data = data_mod.load_data()
+        for r in data["reminders"]:
+            if r["id"] == "null-hide-1":
+                r["hidden"] = True
+                r["hidden_at"] = None  # legacy — key present but null
+        data_mod.save_data(data)
+
+        # Phone sends same item with hidden=true and proper hidden_at
+        resp = fresh_server.post("/api/sync", json={
+            "device_id": "test-device",
+            "reminders": [{"id": "null-hide-1", "text": "Legacy hide",
+                          "created_at": now, "updated_at": now, "order": 0,
+                          "hidden": True, "hidden_at": now}],
+            "completed": [],
+        })
+        assert resp.status_code == 200
+        item = next(r for r in resp.get_json()["reminders"] if r["id"] == "null-hide-1")
+        assert item["hidden"] is True
+        # hidden_at should be the non-null value from the phone side
+        assert item.get("hidden_at") is not None
+
+    def test_sync_hidden_with_missing_hidden_at(self, fresh_server):
+        """Sync handles items where hidden=true but hidden_at key is absent."""
+        _pair_device(fresh_server)
+        now = datetime.now(timezone.utc).isoformat()
+
+        _post_reminder(fresh_server, "No ts", id="no-ts-1")
+        data = data_mod.load_data()
+        for r in data["reminders"]:
+            if r["id"] == "no-ts-1":
+                r["hidden"] = True
+                # no hidden_at key at all
+        data_mod.save_data(data)
+
+        resp = fresh_server.post("/api/sync", json={
+            "device_id": "test-device",
+            "reminders": [{"id": "no-ts-1", "text": "No ts",
+                          "created_at": now, "updated_at": now, "order": 0,
+                          "hidden": True, "hidden_at": now}],
+            "completed": [],
+        })
+        assert resp.status_code == 200
+        item = next(r for r in resp.get_json()["reminders"] if r["id"] == "no-ts-1")
+        assert item["hidden"] is True
+
+    def test_sync_both_hidden_at_null(self, fresh_server):
+        """Sync handles both sides having hidden_at as None."""
+        _pair_device(fresh_server)
+        now = datetime.now(timezone.utc).isoformat()
+
+        _post_reminder(fresh_server, "Both null", id="both-null-1")
+        data = data_mod.load_data()
+        for r in data["reminders"]:
+            if r["id"] == "both-null-1":
+                r["hidden"] = True
+                r["hidden_at"] = None
+        data_mod.save_data(data)
+
+        resp = fresh_server.post("/api/sync", json={
+            "device_id": "test-device",
+            "reminders": [{"id": "both-null-1", "text": "Both null",
+                          "created_at": now, "updated_at": now, "order": 0,
+                          "hidden": True, "hidden_at": None}],
+            "completed": [],
+        })
+        assert resp.status_code == 200
+        item = next(r for r in resp.get_json()["reminders"] if r["id"] == "both-null-1")
+        assert item["hidden"] is True
+        assert item["hidden_at"] is None  # both were null, stays null
+
+    def test_sync_null_updated_at(self, fresh_server):
+        """Sync handles updated_at being None (falls back to created_at)."""
+        _pair_device(fresh_server)
+        old = "2020-01-01T00:00:00+00:00"
+        new = "2026-01-01T00:00:00+00:00"
+
+        _post_reminder(fresh_server, "Old text", id="null-upd-1")
+        data = data_mod.load_data()
+        for r in data["reminders"]:
+            if r["id"] == "null-upd-1":
+                r["updated_at"] = None  # key present but null
+                r["created_at"] = old
+        data_mod.save_data(data)
+
+        resp = fresh_server.post("/api/sync", json={
+            "device_id": "test-device",
+            "reminders": [{"id": "null-upd-1", "text": "New text",
+                          "created_at": old, "updated_at": new, "order": 0}],
+            "completed": [],
+        })
+        assert resp.status_code == 200
+        item = next(r for r in resp.get_json()["reminders"] if r["id"] == "null-upd-1")
+        assert item["text"] == "New text"
+
     def test_sync_latest_update_wins(self, fresh_server):
         """When both sides have the same active item, latest updated_at wins."""
         _pair_device(fresh_server)

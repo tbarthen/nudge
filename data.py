@@ -47,12 +47,14 @@ def is_safe_id(val):
 
 def clamp_timestamp(ts):
     """Validate and clamp an ISO timestamp string. Reject far-future values."""
-    if not isinstance(ts, str) or len(ts) > 30:
+    if not isinstance(ts, str) or len(ts) > 40:
         return None
     try:
         dt = datetime.fromisoformat(ts)
+        # Strip timezone for comparison (phone sends UTC, server uses naive local)
+        dt_naive = dt.replace(tzinfo=None) if dt.tzinfo else dt
         max_dt = datetime.now() + timedelta(days=1)
-        if dt > max_dt:
+        if dt_naive > max_dt:
             return max_dt.isoformat()
         return ts
     except (ValueError, TypeError):

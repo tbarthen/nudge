@@ -396,8 +396,8 @@ def sync_data():
             if in_s_rem and in_p_rem:
                 s = s_rem[item_id]
                 p = p_rem[item_id]
-                s_time = s.get("updated_at", s.get("created_at", ""))
-                p_time = p.get("updated_at", p.get("created_at", ""))
+                s_time = s.get("updated_at") or s.get("created_at") or ""
+                p_time = p.get("updated_at") or p.get("created_at") or ""
                 winner = dict(p) if p_time > s_time else dict(s)
                 # Hidden is sticky
                 if s.get("hidden") or p.get("hidden"):
