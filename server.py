@@ -8,7 +8,7 @@ from flask_cors import CORS
 
 from data import (
     MAX_REMINDERS,
-    data_lock, is_safe_id, safe_int, sanitize_item,
+    clamp_timestamp, data_lock, is_safe_id, safe_int, sanitize_item,
     load_data, save_data,
     prune_completed, track_deletion,
 )
@@ -105,9 +105,7 @@ def add_reminder():
     client_id = str(body.get("id", "")).strip()[:100] if body.get("id") else ""
     if client_id and not is_safe_id(client_id):
         return jsonify({"error": "invalid id format"}), 400
-    client_created = body.get("created_at")
-    if client_created:
-        client_created = str(client_created)[:30]
+    client_created = clamp_timestamp(body.get("created_at"))
     with data_lock:
         data = load_data()
         if len(data["reminders"]) >= MAX_REMINDERS:

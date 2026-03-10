@@ -475,7 +475,6 @@ class TestSync:
     def test_sync_completion_wins(self, fresh_server):
         """If an item is completed on one side, it should be completed in merged result."""
         _pair_device(fresh_server)
-        # Use naive datetime — server's _clamp_timestamp rejects strings > 30 chars
         now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
         # Server has active reminder
@@ -735,6 +734,53 @@ class TestTimestampClamping:
         past = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
         resp = _post_reminder(fresh_server, created_at=past)
         assert resp.status_code == 201
+
+    def test_timezone_aware_timestamp_accepted(self, fresh_server):
+        """UTC timestamps with +00:00 suffix should not be rejected."""
+        ts = datetime.now(timezone.utc).isoformat()  # e.g. 2026-03-10T09:00:00.123456+00:00
+        resp = _post_reminder(fresh_server, created_at=ts)
+        assert resp.status_code == 201
+        # The original timestamp should be preserved (not replaced by now())
+        assert resp.get_json()["created_at"] == ts
+
+    def test_clamp_timestamp_none_returns_none(self, fresh_server):
+        """clamp_timestamp(None) should return None, not crash."""
+        from data import clamp_timestamp
+        assert clamp_timestamp(None) is None
+
+    def test_clamp_timestamp_empty_string_returns_none(self, fresh_server):
+        """clamp_timestamp('') should return None (invalid ISO)."""
+        from data import clamp_timestamp
+        assert clamp_timestamp("") is None
+
+    def test_clamp_timestamp_naive_preserved(self, fresh_server):
+        """Naive (no timezone) timestamps should be accepted."""
+        from data import clamp_timestamp
+        ts = datetime.now().isoformat()
+        assert clamp_timestamp(ts) == ts
+
+    def test_clamp_timestamp_utc_preserved(self, fresh_server):
+        """UTC timestamps with +00:00 should be accepted and preserved."""
+        from data import clamp_timestamp
+        ts = datetime.now(timezone.utc).isoformat()
+        assert clamp_timestamp(ts) == ts
+
+    def test_sync_preserves_phone_utc_timestamps(self, fresh_server):
+        """Phone timestamps (UTC with +00:00) should survive sanitization during sync."""
+        _pair_device(fresh_server)
+        now = datetime.now(timezone.utc).isoformat()
+
+        resp = fresh_server.post("/api/sync", json={
+            "device_id": "test-device",
+            "reminders": [{"id": "utc-1", "text": "UTC test",
+                          "created_at": now, "updated_at": now, "order": 0}],
+            "completed": [],
+        })
+        assert resp.status_code == 200
+        item = next(r for r in resp.get_json()["reminders"] if r["id"] == "utc-1")
+        # Timestamps should be preserved, not stripped to None/defaults
+        assert item["created_at"] == now
+        assert item.get("updated_at") == now
 
 
 # ── Soft Delete / Hidden State ───────────────────────────────────────
