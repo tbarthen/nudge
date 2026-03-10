@@ -1046,15 +1046,16 @@ function isSafeId(id) {
 async function loadReminders() {
   const list = document.getElementById('reminderList');
   let reminders;
+  let archived = [];
   try {
     reminders = await idbGetAll('reminders');
     const allValid = reminders.filter(r => isSafeId(r.id) && r.text && typeof r.text === 'string');
     reminders = allValid.filter(r => !r.hidden);
-    const archived = allValid.filter(r => r.hidden);
+    archived = allValid.filter(r => r.hidden);
     reminders.sort((a, b) => (b.order || 0) - (a.order || 0));
   } catch (_) {
     reminders = [];
-    var archived = [];
+    archived = [];
   }
 
   if (reminders.length === 0 && archived.length === 0) {
