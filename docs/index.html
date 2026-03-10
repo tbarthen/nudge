@@ -937,9 +937,17 @@ async function api(path, method = 'GET', body = null) {
   return data;
 }
 
-// Try server API, swallow errors (for background sync after local writes)
+// Try paired server API, swallow errors (for background sync after local writes)
 async function apiQuiet(path, method = 'GET', body = null) {
-  try { return await api(path, method, body); } catch (e) { return null; }
+  const server = localStorage.getItem('nudge-sync-server');
+  if (!server) return null;
+  try {
+    const opts = { method, headers: { 'Content-Type': 'application/json' } };
+    if (body) opts.body = JSON.stringify(body);
+    const res = await fetch(server + path, opts);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) { return null; }
 }
 
 // -- IDB single-item helpers --

@@ -1999,8 +1999,12 @@ if (activeBtn) activeBtn.classList.add('active');
   }
 })();
 
-// Auto-refresh every 30s
-setInterval(() => { loadReminders(); loadCompleted(); }, 30000);
+// Auto-refresh every 30s (re-sync from server to pick up phone changes)
+setInterval(async () => {
+  await initialServerSync();
+  loadReminders();
+  loadCompleted();
+}, 30000);
 
 // -- Service Worker registration --
 if ('serviceWorker' in navigator) {

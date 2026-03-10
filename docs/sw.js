@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nudge-v37';
+const CACHE_NAME = 'nudge-v38';
 const ASSETS = [
   './',
   'manifest.json',
