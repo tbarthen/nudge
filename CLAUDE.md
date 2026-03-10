@@ -19,6 +19,12 @@ Always pull latest from master before making changes: `git checkout master && gi
 
 This repo is edited from multiple devices. Pulling first avoids merge conflicts.
 
+## Git workflow
+
+- Always commit and push directly to `master`. Do NOT create feature branches.
+- If you cannot push to master (403 error), tell the user immediately — do not retry or create workaround branches.
+- Claude Code web UI sessions can only push to `claude/` prefixed branches (platform restriction). If you hit this, commit locally on master and tell the user to push from their VS Code environment.
+
 ## Architecture
 
 - **Desktop app**: Python (Flask + pystray + tkinter). Entry point: `launcher.py`
