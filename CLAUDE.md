@@ -11,6 +11,14 @@ When modifying `docs/index.html` (the GitHub Pages PWA):
 
 Without the cache bump, phones will keep serving the old cached version indefinitely.
 
+**These steps are mandatory for every change that touches PWA files — always follow them, not just when explicitly asked.**
+
+## Starting a session
+
+Always pull latest from master before making changes: `git checkout master && git pull`
+
+This repo is edited from multiple devices. Pulling first avoids merge conflicts.
+
 ## Architecture
 
 - **Desktop app**: Python (Flask + pystray + tkinter). Entry point: `launcher.py`
