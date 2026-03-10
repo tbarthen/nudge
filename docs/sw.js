@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nudge-v32';
+const CACHE_NAME = 'nudge-v33';
 const ASSETS = [
   './',
   'manifest.json',
@@ -20,6 +20,11 @@ self.addEventListener('activate', e => {
     )
   );
   self.clients.claim();
+});
+
+// Accept SKIP_WAITING message from client
+self.addEventListener('message', e => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 // Fetch — network-first with cache fallback

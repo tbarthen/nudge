@@ -2266,7 +2266,29 @@ setInterval(() => { loadReminders(); loadCompleted(); }, 30000);
 
 // -- Service Worker registration --
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+  navigator.serviceWorker.register('/static/sw.js').then(reg => {
+    reg.update().catch(() => {});
+    const awaitNewWorker = worker => {
+      worker.addEventListener('statechange', () => {
+        if (worker.state === 'activated') location.reload();
+      });
+    };
+    if (reg.waiting) {
+      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      awaitNewWorker(reg.waiting);
+    }
+    reg.addEventListener('updatefound', () => {
+      const newWorker = reg.installing;
+      if (newWorker) {
+        newWorker.addEventListener('statechange', () => {
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            newWorker.postMessage({ type: 'SKIP_WAITING' });
+            awaitNewWorker(newWorker);
+          }
+        });
+      }
+    });
+  }).catch(() => {});
 }
 
 // -- IndexedDB layer for offline PWA --
