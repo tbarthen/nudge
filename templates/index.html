@@ -242,40 +242,17 @@ header .subtitle {
 
 .drag-handle:active { cursor: grabbing; }
 
-.reminder-item.touch-holding {
-  transform: scale(1.03);
+.sortable-ghost {
+  opacity: 0.4;
+}
+
+.sortable-chosen {
   box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-  z-index: 10;
-  transition: transform 0.15s ease-out, box-shadow 0.15s ease-out;
 }
 
-.reminder-item.dragging {
-  height: 0 !important;
-  min-height: 0 !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  border: 0 !important;
-  overflow: hidden;
-  opacity: 0;
-}
-
-.swipe-wrapper.dragging-source {
-  height: 0 !important;
-  min-height: 0 !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  border: 0 !important;
-  overflow: hidden;
-}
-
-.reminder-item.drag-over {
-  margin-top: 6px;
-  border-top: 3px solid var(--accent);
-}
-
-.reminder-item.drag-over-bottom {
-  margin-bottom: 6px;
-  border-bottom: 3px solid var(--accent);
+.sortable-drag {
+  opacity: 0.9;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.4);
 }
 
 .reminder-list {
@@ -288,7 +265,7 @@ header .subtitle {
   to { opacity: 1; transform: translateY(0); }
 }
 
-body:not(.dragging-active) .reminder-item:hover { background: var(--surface); }
+body:not(.sortable-dragging) .reminder-item:hover { background: var(--surface); }
 
 .reminder-item .text {
   flex: 1;
@@ -597,12 +574,7 @@ body:not(.dragging-active) .reminder-item:hover { background: var(--surface); }
   border-radius: 10px;
 }
 
-body.dragging-active {
-  overflow: hidden;
-  touch-action: none;
-}
-
-body.dragging-active .swipe-wrapper .swipe-bg {
+body.sortable-dragging .swipe-wrapper .swipe-bg {
   display: none;
 }
 
@@ -718,7 +690,6 @@ body.select-mode .select-check { display: flex; }
 body.select-mode .drag-handle { display: none; }
 body.select-mode .actions { display: none; }
 body.select-mode .reminder-item { cursor: pointer; }
-body.select-mode .reminder-item[draggable] { draggable: false; }
 
 .reminder-item.selected .select-check {
   background: var(--accent);
@@ -817,6 +788,7 @@ body.select-mode .reminder-item[draggable] { draggable: false; }
   .add-form button { width: 100%; }
 }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.7/Sortable.min.js"></script>
 </head>
 <body>
 <div class="container">
@@ -1045,7 +1017,7 @@ async function loadReminders() {
     <div class="swipe-wrapper" data-id="${safeId}">
       <div class="swipe-bg swipe-bg-complete">&#10003; Done</div>
       <div class="swipe-bg swipe-bg-delete" style="display:none">Delete &#128465;</div>
-      <div class="reminder-item${r.deletion_flagged ? ' deletion-flagged' : ''}" data-id="${safeId}" data-order="${parseInt(r.order) || 0}" draggable="true">
+      <div class="reminder-item${r.deletion_flagged ? ' deletion-flagged' : ''}" data-id="${safeId}" data-order="${parseInt(r.order) || 0}">
         <div class="select-check">&#10003;</div>
         <span class="drag-handle" title="Drag to reorder">&#9776;</span>
         <span class="flag-icon" title="Flagged for deletion on another device">&#9888;</span>
@@ -1540,6 +1512,7 @@ function enterSelectMode(initialId) {
   selectMode = true;
   selectedIds.clear();
   document.body.classList.add('select-mode');
+  if (_sortableInstance) _sortableInstance.option('disabled', true);
   if (initialId) toggleSelect(initialId);
   updateActionBar();
 }
@@ -1548,6 +1521,7 @@ function exitSelectMode() {
   selectMode = false;
   selectedIds.clear();
   document.body.classList.remove('select-mode');
+  if (_sortableInstance) _sortableInstance.option('disabled', false);
   document.querySelectorAll('.reminder-item.selected').forEach(el => el.classList.remove('selected'));
   document.getElementById('actionBar').classList.remove('visible');
 }
@@ -1734,9 +1708,7 @@ function initSwipe() {
     const bgDelete = wrapper.querySelector('.swipe-bg-delete');
     let startX = 0, startY = 0, currentX = 0, swiping = false;
     let directionLocked = false, isHorizontal = false;
-    let longPressTimer = null, longPressed = false;
     const LOCK_THRESHOLD = 10;
-    const LONG_PRESS_MS = 400;
 
     item.addEventListener('touchstart', e => {
       if (selectMode) return;
@@ -1746,31 +1718,14 @@ function initSwipe() {
       swiping = true;
       directionLocked = false;
       isHorizontal = false;
-      longPressed = false;
       item.classList.remove('snapping', 'dismissing');
-      // Start long-press timer
-      longPressTimer = setTimeout(() => {
-        longPressed = true;
-        swiping = false;
-        item.classList.add('touch-holding');
-        if (navigator.vibrate) navigator.vibrate(30);
-        // Dispatch custom event so initDragAndDrop can pick it up
-        item.dispatchEvent(new CustomEvent('longpress', {
-          detail: { clientX: startX, clientY: startY }
-        }));
-      }, LONG_PRESS_MS);
     }, { passive: true });
 
     item.addEventListener('touchmove', e => {
-      if (longPressed || selectMode) return;
+      if (selectMode) return;
       if (!swiping) return;
       const dx = e.touches[0].clientX - startX;
       const dy = e.touches[0].clientY - startY;
-
-      // Any movement cancels long-press
-      if (longPressTimer && (Math.abs(dx) > LOCK_THRESHOLD || Math.abs(dy) > LOCK_THRESHOLD)) {
-        clearTimeout(longPressTimer);
-        longPressTimer = null;
       }
 
       // Lock direction after initial movement exceeds threshold
@@ -1799,9 +1754,6 @@ function initSwipe() {
     }, { passive: true });
 
     item.addEventListener('touchend', async () => {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
-      if (longPressed) { longPressed = false; return; }
       if (!swiping) return;
       swiping = false;
       item.classList.remove('swiping');
@@ -1857,9 +1809,6 @@ function initSwipe() {
     });
 
     item.addEventListener('touchcancel', () => {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
-      longPressed = false;
       swiping = false;
       item.classList.remove('swiping');
       if (isHorizontal) {
@@ -1986,249 +1935,40 @@ async function applyReorder(reorderData) {
   apiQuiet('/api/reminders/reorder', 'POST', safe);
 }
 
-let _dragAbort = null;
+let _sortableInstance = null;
 function initDragAndDrop() {
-  if (_dragAbort) _dragAbort.abort();
-  _dragAbort = new AbortController();
-  const sig = { signal: _dragAbort.signal };
+  if (_sortableInstance) { _sortableInstance.destroy(); _sortableInstance = null; }
   const list = document.getElementById('reminderList');
-  const items = list.querySelectorAll('.reminder-item');
-  let dragItem = null;
-  let _dropTarget = null;
-  let _dropSide = null;
-  let _originalRects = [];
-  let _dragStartY = null;
-  const _DRAG_DEAD_ZONE = 10;
+  if (!list || !list.children.length) return;
 
-  function _setDropTarget(target, side) {
-    if (target === _dropTarget && side === _dropSide) return;
-    if (_dropTarget) _dropTarget.classList.remove('drag-over', 'drag-over-bottom');
-    _dropTarget = target;
-    _dropSide = side;
-    if (target) {
-      target.classList.add(side === 'top' ? 'drag-over' : 'drag-over-bottom');
-      if (navigator.vibrate) navigator.vibrate(15);
-    }
-  }
-
-  function _clearDropTarget() {
-    list.querySelectorAll('.drag-over, .drag-over-bottom').forEach(el =>
-      el.classList.remove('drag-over', 'drag-over-bottom')
-    );
-    _dropTarget = null;
-    _dropSide = null;
-  }
-
-  function _captureRects() {
-    const scrollY = window.scrollY || window.pageYOffset;
-    _originalRects = [...list.querySelectorAll('.reminder-item')]
-      .filter(el => el !== dragItem)
-      .map(el => {
-        const r = el.getBoundingClientRect();
-        return { el, midY: r.top + scrollY + r.height / 2 };
-      });
-  }
-
-  function _findDropFromY(clientY) {
-    const y = clientY + (window.scrollY || window.pageYOffset);
-    let target = null;
-    let side = null;
-    for (const r of _originalRects) {
-      if (y < r.midY) {
-        target = r.el;
-        side = 'top';
-        return { target, side };
-      }
-      target = r.el;
-      side = 'bottom';
-    }
-    return { target, side };
-  }
-
-  // List-level drop zone — handles dropping above first / below last item
-  list.addEventListener('dragover', e => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (!dragItem) return;
-    if (_dragStartY !== null && Math.abs(e.clientY - _dragStartY) < _DRAG_DEAD_ZONE) return;
-    const overItem = e.target.closest('.reminder-item');
-    if (!overItem) {
-      const { target, side } = _findDropFromY(e.clientY);
-      if (target) _setDropTarget(target, side);
-    }
-  }, sig);
-
-  list.addEventListener('dragleave', e => {
-    if (!list.contains(e.relatedTarget)) _clearDropTarget();
-  }, sig);
-
-  list.addEventListener('drop', async e => {
-    e.preventDefault();
-    const dropOnItem = e.target.closest('.reminder-item');
-    if (dropOnItem || !dragItem) { _clearDropTarget(); return; }
-
-    const overItem = _dropTarget;
-    const insertAfter = _dropSide === 'bottom';
-    _clearDropTarget();
-    if (!overItem || overItem === dragItem) return;
-
-    const allItems = [...list.querySelectorAll('.reminder-item')];
-    const fromIdx = allItems.indexOf(dragItem);
-    let toIdx = allItems.indexOf(overItem);
-    allItems.splice(fromIdx, 1);
-    if (fromIdx < toIdx) toIdx--;
-    if (insertAfter) toIdx++;
-    allItems.splice(toIdx, 0, dragItem);
-
-    const reorder = allItems.map((el, i) => ({
-      id: el.dataset.id,
-      order: allItems.length - 1 - i
-    }));
-    await applyReorder(reorder);
-    loadReminders();
-  }, sig);
-
-  items.forEach(item => {
-    // Desktop drag events
-    item.addEventListener('dragstart', e => {
-      if (selectMode) { e.preventDefault(); return; }
-      dragItem = item;
-      item.classList.add('dragging');
-      const wrapper = item.closest('.swipe-wrapper');
-      if (wrapper) wrapper.classList.add('dragging-source');
-      document.body.classList.add('dragging-active');
-      requestAnimationFrame(() => _captureRects());
-      _dragStartY = e.clientY;
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', item.dataset.id);
-    });
-
-    item.addEventListener('dragend', () => {
-      _dragStartY = null;
-      item.classList.remove('dragging');
-      const wrapper = item.closest('.swipe-wrapper');
-      if (wrapper) wrapper.classList.remove('dragging-source');
-      _clearDropTarget();
-      dragItem = null;
-      // Keep dragging-active briefly to suppress hover during reflow
-      requestAnimationFrame(() => {
-        document.body.classList.remove('dragging-active');
-      });
-    });
-
-    item.addEventListener('dragover', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      e.dataTransfer.dropEffect = 'move';
-      if (item !== dragItem) {
-        if (_dragStartY !== null && Math.abs(e.clientY - _dragStartY) < _DRAG_DEAD_ZONE) return;
-        const { target, side } = _findDropFromY(e.clientY);
-        if (target) _setDropTarget(target, side);
-      }
-    });
-
-    item.addEventListener('drop', async e => {
-      e.preventDefault();
-      e.stopPropagation();
-      const overItem = _dropTarget;
-      const insertAfter = _dropSide === 'bottom';
-      _clearDropTarget();
-      if (!dragItem || !overItem || overItem === dragItem) return;
-
-      const allItems = [...list.querySelectorAll('.reminder-item')];
-      const fromIdx = allItems.indexOf(dragItem);
-      let toIdx = allItems.indexOf(overItem);
-      allItems.splice(fromIdx, 1);
-      if (fromIdx < toIdx) toIdx--;
-      if (insertAfter) toIdx++;
-      allItems.splice(toIdx, 0, dragItem);
-
-      const reorder = allItems.map((el, i) => ({
-        id: el.dataset.id,
-        order: allItems.length - 1 - i
+  _sortableInstance = Sortable.create(list, {
+    handle: '.drag-handle',
+    animation: 150,
+    ghostClass: 'sortable-ghost',
+    chosenClass: 'sortable-chosen',
+    dragClass: 'sortable-drag',
+    delay: 0,
+    delayOnTouchOnly: true,
+    touchStartThreshold: 5,
+    forceFallback: true,
+    fallbackClass: 'sortable-drag',
+    fallbackOnBody: true,
+    filter: '.select-check',
+    preventOnFilter: false,
+    onStart: () => {
+      document.body.classList.add('sortable-dragging');
+    },
+    onEnd: async (evt) => {
+      document.body.classList.remove('sortable-dragging');
+      if (evt.oldIndex === evt.newIndex) return;
+      const wrappers = [...list.querySelectorAll('.swipe-wrapper')];
+      const reorder = wrappers.map((w, i) => ({
+        id: w.dataset.id,
+        order: wrappers.length - 1 - i
       }));
       await applyReorder(reorder);
       loadReminders();
-    });
-
-    // Touch drag support (long-press anywhere on item to initiate)
-    let touchDragging = false;
-    let touchClone = null;
-
-    item.addEventListener('longpress', e => {
-      touchDragging = true;
-      dragItem = item;
-      // Clone before collapsing so dimensions are correct
-      touchClone = item.cloneNode(true);
-      touchClone.classList.remove('touch-holding');
-      const itemRect = item.getBoundingClientRect();
-      touchClone.style.cssText = `position:fixed;left:${itemRect.left}px;top:${e.detail.clientY - 20}px;width:${itemRect.width}px;opacity:0.85;z-index:9999;pointer-events:none;box-shadow:0 8px 30px rgba(0,0,0,0.4);border-radius:10px;`;
-      document.body.appendChild(touchClone);
-      // Collapse original item
-      item.classList.remove('touch-holding');
-      item.classList.add('dragging');
-      const wrapper = item.closest('.swipe-wrapper');
-      if (wrapper) wrapper.classList.add('dragging-source');
-      document.body.classList.add('dragging-active');
-      // Capture rects after collapse takes effect
-      requestAnimationFrame(() => _captureRects());
-    });
-
-    item.addEventListener('touchmove', e => {
-      if (!touchDragging) return;
-      e.preventDefault();
-      const y = e.touches[0].clientY;
-      if (touchClone) touchClone.style.top = (y - 20) + 'px';
-
-      // Use stored original positions — immune to layout shifts
-      const { target, side } = _findDropFromY(y);
-      if (target) _setDropTarget(target, side);
-    }, { passive: false });
-
-    item.addEventListener('touchend', async () => {
-      if (!touchDragging) return;
-      touchDragging = false;
-      if (touchClone) {
-        document.body.removeChild(touchClone);
-        touchClone = null;
-      }
-      item.classList.remove('dragging', 'touch-holding');
-      const wrapperEnd = item.closest('.swipe-wrapper');
-      if (wrapperEnd) wrapperEnd.classList.remove('dragging-source');
-      document.body.classList.remove('dragging-active');
-
-      const overItem = _dropTarget;
-      const insertAfter = _dropSide === 'bottom';
-      _clearDropTarget();
-      if (!overItem || overItem === dragItem) { dragItem = null; return; }
-
-      const allItems = [...list.querySelectorAll('.reminder-item')];
-      const fromIdx = allItems.indexOf(dragItem);
-      let toIdx = allItems.indexOf(overItem);
-      allItems.splice(fromIdx, 1);
-      if (fromIdx < toIdx) toIdx--;
-      if (insertAfter) toIdx++;
-      allItems.splice(toIdx, 0, dragItem);
-
-      const reorder = allItems.map((el, i) => ({
-        id: el.dataset.id,
-        order: allItems.length - 1 - i
-      }));
-      await applyReorder(reorder);
-      dragItem = null;
-      loadReminders();
-    });
-
-    item.addEventListener('touchcancel', () => {
-      if (!touchDragging) return;
-      touchDragging = false;
-      item.classList.remove('dragging', 'touch-holding');
-      const wrapperCancel = item.closest('.swipe-wrapper');
-      if (wrapperCancel) wrapperCancel.classList.remove('dragging-source');
-      document.body.classList.remove('dragging-active');
-      _clearDropTarget();
-      if (touchClone) { document.body.removeChild(touchClone); touchClone = null; }
-    });
+    }
   });
 }
 
