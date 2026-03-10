@@ -289,6 +289,9 @@ def _init_window():
     refresh_label = tk.Label(root, text="\u2022 syncing...", font=("Segoe UI", 8),
                              bg=BG, fg="#555577", anchor="w")
     root._refresh_label = refresh_label
+    # Reserve bottom space before canvas claims everything
+    refresh_label.pack(side="bottom", fill="x", padx=12)
+    refresh_label.pack_forget()
 
     canvas = tk.Canvas(root, bg=BG, highlightthickness=0)
     scrollbar = tk.Scrollbar(root, orient="vertical", command=canvas.yview)
@@ -390,10 +393,7 @@ def _rebuild_list():
     if _cached_reminders:
         _populate_list(_cached_reminders, is_cache=True)
 
-    try:
-        root._refresh_label.pack(fill="x", padx=12, before=root._canvas)
-    except tk.TclError:
-        root._refresh_label.pack(fill="x", padx=12)
+    root._refresh_label.pack(side="bottom", fill="x", padx=12)
 
     def do_fetch():
         reminders = _fetch_reminders(port)
