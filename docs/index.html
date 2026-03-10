@@ -230,17 +230,8 @@ header .subtitle {
 }
 
 .drag-handle {
-  cursor: grab;
-  color: var(--text-muted);
-  font-size: 1.1rem;
-  padding: 4px 2px;
-  flex-shrink: 0;
-  user-select: none;
-  touch-action: none;
-  line-height: 1;
+  display: none;
 }
-
-.drag-handle:active { cursor: grabbing; }
 
 .sortable-ghost {
   opacity: 0.4;
@@ -277,10 +268,6 @@ body:not(.sortable-dragging) .reminder-item:hover { background: var(--surface); 
   display: none;
 }
 
-.reminder-item:has(.edit-input.active) .drag-handle {
-  pointer-events: none;
-  opacity: 0.3;
-}
 
 .reminder-item .edit-input {
   flex: 1;
@@ -1718,7 +1705,6 @@ function initSwipe() {
 
     item.addEventListener('touchstart', e => {
       if (selectMode) return;
-      if (e.target.closest('.drag-handle')) return;
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
       currentX = 0;
@@ -1729,7 +1715,7 @@ function initSwipe() {
     }, { passive: true });
 
     item.addEventListener('touchmove', e => {
-      if (selectMode) return;
+      if (selectMode || document.body.classList.contains('sortable-dragging')) return;
       if (!swiping) return;
       const dx = e.touches[0].clientX - startX;
       const dy = e.touches[0].clientY - startY;
@@ -1949,18 +1935,17 @@ function initDragAndDrop() {
   if (!list || !list.children.length) return;
 
   _sortableInstance = Sortable.create(list, {
-    handle: '.drag-handle',
     animation: 150,
     ghostClass: 'sortable-ghost',
     chosenClass: 'sortable-chosen',
     dragClass: 'sortable-drag',
-    delay: 0,
+    delay: 300,
     delayOnTouchOnly: true,
     touchStartThreshold: 5,
     forceFallback: true,
     fallbackClass: 'sortable-drag',
     fallbackOnBody: true,
-    filter: '.select-check',
+    filter: '.select-check, .btn-complete, .btn-menu, .btn-save, .actions',
     preventOnFilter: false,
     onStart: () => {
       document.body.classList.add('sortable-dragging');
