@@ -731,6 +731,10 @@ body.select-mode .reminder-item { cursor: pointer; }
   from { transform: translateY(100%); }
   to { transform: translateY(0); }
 }
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
 
 .action-bar.visible { display: flex; }
 
@@ -789,6 +793,7 @@ body.select-mode .reminder-item { cursor: pointer; }
     <h1>DO IT!!!</h1>
     <div class="subtitle">Your daily nudge</div>
     <div class="header-btns">
+      <button class="header-btn" id="syncBtn" onclick="desktopSyncNow()" title="Sync" style="display:none">&#x1f504;</button>
       <button class="header-btn" onclick="openShare()" title="Share">&#x1F517;</button>
       <button class="header-btn" onclick="toggleSettings()" title="Settings">&#9881;</button>
     </div>
@@ -820,6 +825,12 @@ body.select-mode .reminder-item { cursor: pointer; }
   <span class="toast-text" id="undoText"></span>
   <button onclick="undoAction()">Undo</button>
   <button onclick="dismissToast()" style="background:none;color:var(--text-muted);padding:4px 8px;font-size:1.2rem;margin-left:8px;">&times;</button>
+</div>
+
+<!-- Sync info toast -->
+<div class="undo-toast" id="syncToast">
+  <span class="toast-text" id="syncToastText"></span>
+  <button onclick="document.getElementById('syncToast').classList.remove('visible')" style="background:none;color:var(--text-muted);padding:4px 8px;font-size:1.2rem">&times;</button>
 </div>
 
 <!-- Floating action bar for multi-select -->
@@ -2152,7 +2163,25 @@ function initSyncUI() {
     loadSyncState();
   } else {
     document.getElementById('syncDesktop').style.display = 'block';
+    document.getElementById('syncBtn').style.display = '';
   }
+}
+
+// Desktop: sync now button — refreshes data and shows phone hint
+async function desktopSyncNow() {
+  const btn = document.getElementById('syncBtn');
+  btn.style.animation = 'spin 0.6s ease';
+  try {
+    await initialServerSync();
+    loadReminders();
+    loadCompleted();
+  } catch (e) { /* offline */ }
+  btn.addEventListener('animationend', () => btn.style.animation = '', { once: true });
+  const toast = document.getElementById('syncToast');
+  document.getElementById('syncToastText').textContent =
+    'Refreshed. To pull updates from your phone, open Nudge on your phone.';
+  toast.classList.add('visible');
+  setTimeout(() => toast.classList.remove('visible'), 6000);
 }
 
 // Desktop: generate pairing code
