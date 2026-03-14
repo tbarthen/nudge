@@ -180,6 +180,26 @@ def _show_undo(action, item_id, item_text):
         undo_frame.pack(side="bottom", fill="x")
 
 
+def _show_sync_note():
+    """Show a brief note that the phone app must be open to sync."""
+    root = _root
+    if not root:
+        return
+    note = tk.Toplevel(root)
+    note.overrideredirect(True)
+    note.attributes("-topmost", True)
+    note.configure(bg="#2a2a4a")
+    msg = tk.Label(note, text="Refreshed.  To sync from phone, open Nudge on your phone.",
+                   font=("Segoe UI", 9), bg="#2a2a4a", fg="#ccc", padx=12, pady=8)
+    msg.pack()
+    note.update_idletasks()
+    nw = note.winfo_reqwidth()
+    rx = root.winfo_x() + (WIN_W - nw) // 2
+    ry = root.winfo_y() + 48
+    note.geometry(f"+{rx}+{ry}")
+    root.after(4000, lambda: note.destroy() if note.winfo_exists() else None)
+
+
 def _dismiss_undo():
     """Hide the undo bar."""
     root = _root
@@ -223,6 +243,15 @@ def _init_window():
                           bd=0, activebackground="#c0392b", activeforeground="white",
                           cursor="hand2", command=_hide_popup)
     close_btn.pack(side="right", padx=8, pady=6)
+
+    def _on_sync_click():
+        _rebuild_list()
+        _show_sync_note()
+
+    sync_btn = tk.Button(title_frame, text="\u27f3", font=("Segoe UI", 14), bg=ACCENT, fg="white",
+                         bd=0, activebackground="#c0392b", activeforeground="white",
+                         cursor="hand2", command=_on_sync_click)
+    sync_btn.pack(side="right", pady=6)
 
     def start_drag(e):
         root._drag_x = e.x
