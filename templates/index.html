@@ -925,7 +925,7 @@ body.select-mode .reminder-item { cursor: pointer; }
           <div id="syncPaired" style="display:none">
             <div style="font-size:0.9rem;color:var(--success);margin-bottom:8px">Synced with <span id="syncedServer"></span></div>
             <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:8px" id="lastSyncTime">Last sync: never</div>
-            <button onclick="syncNow()" style="padding:6px 14px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:0.8rem;margin-right:6px">Sync now</button>
+            <button onclick="syncNow()" style="padding:8px 16px;background:var(--accent);color:white;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:600;margin-right:6px">Sync now</button>
             <button onclick="unpairDevice()" style="padding:6px 14px;background:none;color:var(--text-muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:0.8rem">Unsync</button>
           </div>
         </div>
@@ -2161,10 +2161,6 @@ function initSyncUI() {
     const popupIntervalRow = document.getElementById('settingPopupInterval');
     if (popupIntervalRow) popupIntervalRow.style.display = 'none';
     loadSyncState();
-    // Show sync button if paired
-    if (localStorage.getItem('nudge-synced') === 'true') {
-      document.getElementById('syncBtn').style.display = '';
-    }
   } else {
     document.getElementById('syncDesktop').style.display = 'block';
     document.getElementById('syncBtn').style.display = '';
