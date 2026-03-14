@@ -87,7 +87,8 @@ def put_config():
 @app.route("/api/reminders", methods=["GET"])
 def get_reminders():
     data = load_data()
-    reminders = sorted(data["reminders"], key=lambda r: -r.get("order", 0))
+    reminders = [r for r in data["reminders"] if not r.get("hidden")]
+    reminders.sort(key=lambda r: -r.get("order", 0))
     return jsonify(reminders)
 
 
