@@ -2440,7 +2440,7 @@ async function syncNowUI() {
     if (status) { status.style.display = 'block'; status.style.color = 'var(--accent)'; status.textContent = 'Sync failed — is the desktop app running and on the same WiFi?'; }
   } finally {
     if (btn) btn.disabled = false, btn.textContent = 'Sync now';
-    setTimeout(() => { if (status) status.style.display = 'none'; }, 5000);
+    setTimeout(() => { if (status) status.style.display = 'none'; }, 15000);
   }
 }
 
