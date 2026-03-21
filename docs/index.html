@@ -927,7 +927,8 @@ body.select-mode .reminder-item { cursor: pointer; }
           <div id="syncPaired" style="display:none">
             <div style="font-size:0.9rem;color:var(--success);margin-bottom:8px">Synced with <span id="syncedServer"></span></div>
             <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:8px" id="lastSyncTime">Last sync: never</div>
-            <button onclick="syncNow()" style="padding:8px 16px;background:var(--accent);color:white;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:600;margin-right:6px">Sync now</button>
+            <button id="syncNowBtn" onclick="syncNowUI()" style="padding:8px 16px;background:var(--accent);color:white;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:600;margin-right:6px">Sync now</button>
+            <div id="syncStatus" style="font-size:0.75rem;margin-top:6px;display:none"></div>
             <button onclick="unpairDevice()" style="padding:6px 14px;background:none;color:var(--text-muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:0.8rem">Unsync</button>
           </div>
         </div>
@@ -2417,6 +2418,22 @@ function loadSyncState() {
 // Perform sync
 let _syncInProgress = false;
 
+async function syncNowUI() {
+  const btn = document.getElementById('syncNowBtn');
+  const status = document.getElementById('syncStatus');
+  if (btn) btn.disabled = true, btn.textContent = 'Syncing...';
+  if (status) status.style.display = 'none';
+  try {
+    await syncNow();
+    if (status) { status.style.display = 'block'; status.style.color = 'var(--success)'; status.textContent = 'Sync complete'; }
+  } catch (e) {
+    if (status) { status.style.display = 'block'; status.style.color = 'var(--accent)'; status.textContent = 'Sync failed — is the desktop app running and on the same WiFi?'; }
+  } finally {
+    if (btn) btn.disabled = false, btn.textContent = 'Sync now';
+    setTimeout(() => { if (status) status.style.display = 'none'; }, 5000);
+  }
+}
+
 async function syncNow() {
   const server = localStorage.getItem('nudge-sync-server');
   const deviceId = localStorage.getItem('nudge-device-id');
@@ -2486,6 +2503,7 @@ async function syncNow() {
     loadCompleted();
   } catch (e) {
     console.warn('Sync error:', e.message);
+    throw e;
   } finally {
     _syncInProgress = false;
   }
