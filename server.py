@@ -398,6 +398,9 @@ def sync_data():
                 s_time = s.get("updated_at") or s.get("created_at") or ""
                 p_time = p.get("updated_at") or p.get("created_at") or ""
                 winner = dict(p) if p_time > s_time else dict(s)
+                # Desktop order is authoritative
+                if "order" in s:
+                    winner["order"] = s["order"]
                 # Hidden is sticky
                 if s.get("hidden") or p.get("hidden"):
                     winner["hidden"] = True
@@ -405,11 +408,13 @@ def sync_data():
                 merged_reminders.append(winner)
                 continue
 
-            # Only on one side
+            # Only on one side — phone-only items get order after existing items
             if in_s_rem:
                 merged_reminders.append(s_rem[item_id])
             elif in_p_rem:
-                merged_reminders.append(p_rem[item_id])
+                item = dict(p_rem[item_id])
+                item["order"] = -1  # phone-only items sort to bottom
+                merged_reminders.append(item)
 
         if len(merged_reminders) > MAX_REMINDERS:
             merged_reminders.sort(key=lambda r: r.get("order", 0), reverse=True)
