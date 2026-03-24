@@ -180,16 +180,33 @@ def _show_undo(action, item_id, item_text):
         undo_frame.pack(side="bottom", fill="x")
 
 
+def _has_paired_devices():
+    """Check if any mobile devices are paired."""
+    try:
+        url = f"http://localhost:{_port}/api/pair/count"
+        with urllib.request.urlopen(url, timeout=2) as resp:
+            data = json.loads(resp.read().decode())
+            return data.get("count", 0) > 0
+    except Exception:
+        return False
+
+
 def _show_sync_note():
-    """Show a brief note that the phone app must be open to sync."""
+    """Show a brief note about sync status."""
     root = _root
     if not root:
         return
+
+    if _has_paired_devices():
+        text = "Refreshed.  To sync from phone, open Nudge on your phone."
+    else:
+        text = "No mobile device paired. Sync is used to connect with the Nudge phone app."
+
     note = tk.Toplevel(root)
     note.overrideredirect(True)
     note.attributes("-topmost", True)
     note.configure(bg="#2a2a4a")
-    msg = tk.Label(note, text="Refreshed.  To sync from phone, open Nudge on your phone.",
+    msg = tk.Label(note, text=text,
                    font=("Segoe UI", 9), bg="#2a2a4a", fg="#ccc", padx=12, pady=8)
     msg.pack()
     note.update_idletasks()

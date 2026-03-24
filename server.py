@@ -316,16 +316,118 @@ def delete_completed(completed_id):
 
 # ── Sync API ─────────────────────────────────────────────────────────
 
+# ── Sync helpers ──────────────────────────────────────────────────────
+
+
+def _validate_sync_payload(body):
+    """Validate and sanitize sync request body.
+
+    Returns (phone_reminders, phone_completed, None) on success,
+    or (None, None, error_response) on failure.
+    """
+    phone_reminders = body.get("reminders", [])
+    phone_completed = body.get("completed", [])
+
+    if not isinstance(phone_reminders, list) or not isinstance(phone_completed, list):
+        return None, None, (jsonify({"error": "reminders and completed must be arrays"}), 400)
+    if len(phone_reminders) > MAX_REMINDERS * 2 or len(phone_completed) > MAX_REMINDERS * 2:
+        return None, None, (jsonify({"error": "payload too large"}), 400)
+
+    for item in phone_reminders + phone_completed:
+        if not isinstance(item, dict) or not isinstance(item.get("id"), str):
+            return None, None, (jsonify({"error": "each item must have a string id"}), 400)
+        if not is_safe_id(item["id"]):
+            return None, None, (jsonify({"error": "invalid item id format"}), 400)
+
+    phone_reminders = [sanitize_item(r) for r in phone_reminders]
+    phone_completed = [sanitize_item(c, allow_completed=True) for c in phone_completed]
+    return phone_reminders, phone_completed, None
+
+
+def _merge_sync_state(server_reminders, server_completed, phone_reminders,
+                      phone_completed, deleted_ids):
+    """Merge phone state with server state, returning (reminders, completed).
+
+    Conflict resolution rules:
+    - Deleted items (in deleted_ids) are always excluded
+    - Completed on either side wins over active
+    - Both completed: latest completed_at wins
+    - Both active: latest updated_at/created_at wins, desktop order is kept
+    - Hidden is sticky: once hidden on either side, stays hidden
+    - Phone-only new items get order=-1 (sort to bottom)
+    """
+    s_rem = {r["id"]: r for r in server_reminders}
+    s_comp = {c["id"]: c for c in server_completed}
+    p_rem = {r["id"]: r for r in phone_reminders}
+    p_comp = {c["id"]: c for c in phone_completed}
+
+    all_ids = set(s_rem) | set(s_comp) | set(p_rem) | set(p_comp)
+
+    merged_reminders = []
+    merged_completed = []
+
+    for item_id in all_ids:
+        if item_id in deleted_ids:
+            continue
+
+        in_s_comp = item_id in s_comp
+        in_p_comp = item_id in p_comp
+
+        # Completed on either side -> completed
+        if in_s_comp or in_p_comp:
+            if in_s_comp and in_p_comp:
+                if (p_comp[item_id].get("completed_at") or "") > (s_comp[item_id].get("completed_at") or ""):
+                    comp_item = p_comp[item_id]
+                else:
+                    comp_item = s_comp[item_id]
+            elif in_p_comp:
+                comp_item = p_comp[item_id]
+            else:
+                comp_item = s_comp[item_id]
+            merged_completed.append(comp_item)
+            continue
+
+        in_s_rem = item_id in s_rem
+        in_p_rem = item_id in p_rem
+
+        # Both active -> latest wins
+        if in_s_rem and in_p_rem:
+            s = s_rem[item_id]
+            p = p_rem[item_id]
+            s_time = s.get("updated_at") or s.get("created_at") or ""
+            p_time = p.get("updated_at") or p.get("created_at") or ""
+            winner = dict(p) if p_time > s_time else dict(s)
+            # Desktop order is authoritative
+            if "order" in s:
+                winner["order"] = s["order"]
+            # Hidden is sticky
+            if s.get("hidden") or p.get("hidden"):
+                winner["hidden"] = True
+                winner["hidden_at"] = max(s.get("hidden_at") or "", p.get("hidden_at") or "") or None
+            merged_reminders.append(winner)
+            continue
+
+        # Only on one side — phone-only items get order after existing items
+        if in_s_rem:
+            merged_reminders.append(s_rem[item_id])
+        elif in_p_rem:
+            item = dict(p_rem[item_id])
+            item["order"] = -1  # phone-only items sort to bottom
+            merged_reminders.append(item)
+
+    if len(merged_reminders) > MAX_REMINDERS:
+        merged_reminders.sort(key=lambda r: r.get("order", 0), reverse=True)
+        merged_reminders = merged_reminders[:MAX_REMINDERS]
+
+    return merged_reminders, merged_completed
+
+
+# ── Sync endpoint ─────────────────────────────────────────────────────
+
+
 @app.route("/api/sync", methods=["POST"])
 def sync_data():
-    """Merge phone state with server state.
-
-    Conflict resolution:
-    - Completed always wins over active
-    - Latest timestamp wins for edits
-    - Deletion only wins if item is completed everywhere
-    - New items from either side are kept
-    """
+    """Merge phone state with server state and return the merged result."""
     body = request.get_json(silent=True)
     if not body:
         return jsonify({"error": "invalid JSON body"}), 400
@@ -334,91 +436,19 @@ def sync_data():
     if device_id not in pairing.paired_devices:
         return jsonify({"error": "device not paired"}), 403
 
-    phone_reminders = body.get("reminders", [])
-    phone_completed = body.get("completed", [])
-
-    if not isinstance(phone_reminders, list) or not isinstance(phone_completed, list):
-        return jsonify({"error": "reminders and completed must be arrays"}), 400
-    if len(phone_reminders) > MAX_REMINDERS * 2 or len(phone_completed) > MAX_REMINDERS * 2:
-        return jsonify({"error": "payload too large"}), 400
-
-    for item in phone_reminders + phone_completed:
-        if not isinstance(item, dict) or not isinstance(item.get("id"), str):
-            return jsonify({"error": "each item must have a string id"}), 400
-        if not is_safe_id(item["id"]):
-            return jsonify({"error": "invalid item id format"}), 400
-
-    phone_reminders = [sanitize_item(r) for r in phone_reminders]
-    phone_completed = [sanitize_item(c, allow_completed=True) for c in phone_completed]
+    phone_reminders, phone_completed, err = _validate_sync_payload(body)
+    if err:
+        return err
 
     with data_lock:
         data = load_data()
-        server_reminders = data["reminders"]
-        server_completed = data["completed"]
         deleted_ids = set(data.get("deleted_ids", []))
 
-        s_rem = {r["id"]: r for r in server_reminders}
-        s_comp = {c["id"]: c for c in server_completed}
-        p_rem = {r["id"]: r for r in phone_reminders}
-        p_comp = {c["id"]: c for c in phone_completed}
-
-        all_ids = set(s_rem) | set(s_comp) | set(p_rem) | set(p_comp)
-
-        merged_reminders = []
-        merged_completed = []
-
-        for item_id in all_ids:
-            if item_id in deleted_ids:
-                continue
-
-            in_s_comp = item_id in s_comp
-            in_p_comp = item_id in p_comp
-
-            # Completed on either side -> completed
-            if in_s_comp or in_p_comp:
-                if in_s_comp and in_p_comp:
-                    if (p_comp[item_id].get("completed_at") or "") > (s_comp[item_id].get("completed_at") or ""):
-                        comp_item = p_comp[item_id]
-                    else:
-                        comp_item = s_comp[item_id]
-                elif in_p_comp:
-                    comp_item = p_comp[item_id]
-                else:
-                    comp_item = s_comp[item_id]
-                merged_completed.append(comp_item)
-                continue
-
-            in_s_rem = item_id in s_rem
-            in_p_rem = item_id in p_rem
-
-            # Both active -> latest wins
-            if in_s_rem and in_p_rem:
-                s = s_rem[item_id]
-                p = p_rem[item_id]
-                s_time = s.get("updated_at") or s.get("created_at") or ""
-                p_time = p.get("updated_at") or p.get("created_at") or ""
-                winner = dict(p) if p_time > s_time else dict(s)
-                # Desktop order is authoritative
-                if "order" in s:
-                    winner["order"] = s["order"]
-                # Hidden is sticky
-                if s.get("hidden") or p.get("hidden"):
-                    winner["hidden"] = True
-                    winner["hidden_at"] = max(s.get("hidden_at") or "", p.get("hidden_at") or "") or None
-                merged_reminders.append(winner)
-                continue
-
-            # Only on one side — phone-only items get order after existing items
-            if in_s_rem:
-                merged_reminders.append(s_rem[item_id])
-            elif in_p_rem:
-                item = dict(p_rem[item_id])
-                item["order"] = -1  # phone-only items sort to bottom
-                merged_reminders.append(item)
-
-        if len(merged_reminders) > MAX_REMINDERS:
-            merged_reminders.sort(key=lambda r: r.get("order", 0), reverse=True)
-            merged_reminders = merged_reminders[:MAX_REMINDERS]
+        merged_reminders, merged_completed = _merge_sync_state(
+            data["reminders"], data["completed"],
+            phone_reminders, phone_completed,
+            deleted_ids,
+        )
 
         data["reminders"] = merged_reminders
         data["completed"] = merged_completed

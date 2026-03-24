@@ -108,6 +108,14 @@ def pairing_status():
     return jsonify({"paired": paired})
 
 
+@pairing_bp.route("/api/pair/count", methods=["GET"])
+def paired_device_count():
+    """Return the number of currently paired devices."""
+    with _pairing_lock:
+        count = len(paired_devices)
+    return jsonify({"count": count})
+
+
 @pairing_bp.route("/api/pair/unpair", methods=["POST"])
 def unpair_device():
     """Remove a device from the paired set."""

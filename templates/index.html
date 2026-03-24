@@ -894,14 +894,20 @@ body.select-mode .reminder-item { cursor: pointer; }
     <div class="setting-row" style="flex-direction:column;align-items:stretch;gap:10px">
       <label>Sync</label>
       <div id="syncSection">
-        <!-- Desktop: generate pairing code -->
+        <!-- Desktop: generate pairing code (or show no-devices message) -->
         <div id="syncDesktop" style="display:none">
-          <button onclick="generatePairingCode()" style="padding:8px 16px;background:var(--accent);color:white;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:600">Generate pairing code</button>
-          <div id="pairingCodeDisplay" style="display:none;margin-top:10px">
-            <div style="font-size:2rem;font-weight:900;letter-spacing:8px;text-align:center;color:var(--accent);font-family:monospace" id="pairingCode"></div>
-            <div style="font-size:0.75rem;color:var(--text-muted);text-align:center;margin-top:4px" id="pairingExpiry"></div>
+          <div id="syncDesktopNoPair" style="display:none;font-size:0.85rem;color:var(--text-muted)">
+            No mobile device paired. Sync is used to connect with the Nudge phone app.
+            <button onclick="document.getElementById('syncDesktopNoPair').style.display='none';document.getElementById('syncDesktopPairUI').style.display='block'" style="display:block;margin-top:8px;padding:6px 14px;background:none;color:var(--text-muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:0.8rem">Set up pairing</button>
           </div>
-          <div id="pairedDevicesInfo" style="margin-top:8px;font-size:0.8rem;color:var(--text-muted)"></div>
+          <div id="syncDesktopPairUI">
+            <button onclick="generatePairingCode()" style="padding:8px 16px;background:var(--accent);color:white;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:600">Generate pairing code</button>
+            <div id="pairingCodeDisplay" style="display:none;margin-top:10px">
+              <div style="font-size:2rem;font-weight:900;letter-spacing:8px;text-align:center;color:var(--accent);font-family:monospace" id="pairingCode"></div>
+              <div style="font-size:0.75rem;color:var(--text-muted);text-align:center;margin-top:4px" id="pairingExpiry"></div>
+            </div>
+            <div id="pairedDevicesInfo" style="margin-top:8px;font-size:0.8rem;color:var(--text-muted)"></div>
+          </div>
         </div>
         <!-- Phone/PWA: enter server + code -->
         <div id="syncPhone" style="display:none">
@@ -2155,7 +2161,7 @@ const isPWA = window.matchMedia('(display-mode: standalone)').matches
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 // Show correct sync UI based on context
-function initSyncUI() {
+async function initSyncUI() {
   if (isMobile || isPWA) {
     document.getElementById('syncPhone').style.display = 'block';
     // Popup interval is a desktop tray setting — hide on phone/PWA
@@ -2165,6 +2171,15 @@ function initSyncUI() {
   } else {
     document.getElementById('syncDesktop').style.display = 'block';
     document.getElementById('syncBtn').style.display = '';
+    // Show pairing UI or "no devices" message based on paired device count
+    try {
+      const resp = await fetch('/api/pair/count');
+      const data = await resp.json();
+      if (data.count === 0) {
+        document.getElementById('syncDesktopNoPair').style.display = 'block';
+        document.getElementById('syncDesktopPairUI').style.display = 'none';
+      }
+    } catch (e) { /* ignore — default shows pairing UI */ }
   }
 }
 
@@ -2181,8 +2196,16 @@ async function desktopSyncNow() {
       await initialServerSync();
       loadReminders();
       loadCompleted();
-      document.getElementById('syncToastText').textContent =
-        'Refreshed. To pull updates from your phone, open Nudge on your phone.';
+      // Check if any devices are paired before showing phone-specific message
+      let hasPaired = false;
+      try {
+        const pr = await fetch('/api/pair/count');
+        const pd = await pr.json();
+        hasPaired = pd.count > 0;
+      } catch (e) { /* ignore */ }
+      document.getElementById('syncToastText').textContent = hasPaired
+        ? 'Refreshed. To pull updates from your phone, open Nudge on your phone.'
+        : 'No mobile device paired. Sync is used to connect with the Nudge phone app.';
     }
   } catch (e) {
     document.getElementById('syncToastText').textContent = 'Sync failed — check connection.';
@@ -2468,14 +2491,12 @@ async function syncNow() {
     });
 
     if (!res.ok) {
-      const err = await res.json();
+      const err = await res.json().catch(() => ({}));
       if (err.error === 'device not paired') {
         localStorage.removeItem('nudge-synced');
         loadSyncState();
-        return;
       }
-      console.warn('Sync failed:', err.error);
-      return;
+      throw new Error(err.error || 'sync request failed');
     }
 
     const merged = await res.json();
