@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Setup</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'Segoe UI', sans-serif;
+    background: #1a1a2e; color: #e0e0e0;
+    display: flex; justify-content: center; align-items: center;
+    min-height: 100vh; padding: 24px;
+  }
+  .card {
+    background: #25253e; border-radius: 16px; padding: 40px;
+    max-width: 520px; width: 100%; box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  }
+  h1 { font-size: 1.4rem; margin-bottom: 8px; color: #fff; }
+  .subtitle { color: #888; font-size: 0.85rem; margin-bottom: 28px; }
+  .steps { list-style: none; counter-reset: step; }
+  .steps li {
+    counter-increment: step; position: relative;
+    padding-left: 36px; margin-bottom: 20px; line-height: 1.5;
+  }
+  .steps li::before {
+    content: counter(step);
+    position: absolute; left: 0; top: 0;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: #e74c3c; color: #fff; font-size: 0.8rem;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700;
+  }
+  .steps li strong { color: #fff; }
+  .cmd-box {
+    background: #1a1a2e; border: 1px solid #3a3a5a; border-radius: 8px;
+    padding: 12px 14px; margin-top: 8px; display: flex;
+    align-items: center; gap: 8px;
+  }
+  .cmd-box code {
+    flex: 1; font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 0.8rem; color: #7fc8f8; word-break: break-all;
+    user-select: all;
+  }
+  .copy-btn {
+    background: #e74c3c; color: #fff; border: none; border-radius: 6px;
+    padding: 6px 14px; cursor: pointer; font-size: 0.8rem; font-weight: 600;
+    white-space: nowrap; transition: background 0.2s;
+  }
+  .copy-btn:hover { background: #c0392b; }
+  .copy-btn.copied { background: #27ae60; }
+  .note {
+    margin-top: 28px; padding: 14px 16px; background: #1e1e36;
+    border-radius: 8px; font-size: 0.8rem; color: #999; line-height: 1.6;
+  }
+  .note strong { color: #bbb; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Nudge Setup</h1>
+  <p class="subtitle">One-time install &mdash; takes about 2 minutes</p>
+
+  <ol class="steps">
+    <li>
+      <strong>Open Terminal</strong><br>
+      Right-click the <strong>Start button</strong> (bottom-left of screen) and choose <strong>"Terminal"</strong>
+    </li>
+    <li>
+      <strong>Paste this command</strong> and press Enter<br>
+      <div class="cmd-box">
+        <code id="cmd">curl -o "%USERPROFILE%\install-nudge.cmd" https://raw.githubusercontent.com/tbarthen/nudge/master/install.bat && "%USERPROFILE%\install-nudge.cmd"</code>
+        <button class="copy-btn" onclick="copyCmd(this)">Copy</button>
+      </div>
+    </li>
+    <li>
+      <strong>Follow the prompts</strong><br>
+      If asked to allow an install, click <strong>Yes</strong>. Everything else is automatic.
+    </li>
+  </ol>
+
+  <div class="note">
+    <strong>What this does:</strong> Installs Python and Git if needed,
+    downloads the app to your home folder, and starts it in your system tray
+    (bottom-right of screen &mdash; click the <strong>^</strong> arrow if you don't see it).
+    It will also start automatically when you log in.<br><br>
+    <strong>To update later:</strong> Just repeat step 2 above.
+  </div>
+</div>
+
+<script>
+function copyCmd(btn) {
+  const text = document.getElementById('cmd').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+</script>
+</body>
+</html>
